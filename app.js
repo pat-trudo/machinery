@@ -213,6 +213,11 @@ window.COUNTRIES = [
 // ---------------------------------------------------------------------
 //  Helpers
 // ---------------------------------------------------------------------
+window.CURRENCIES = [
+  { code: "SAR", label: "SAR" }, { code: "AED", label: "AED" }, { code: "BHD", label: "BHD" },
+  { code: "GBP", label: "£ GBP" }, { code: "EUR", label: "€ EUR" }, { code: "USD", label: "$ USD" },
+];
+
 const App = {
   catLabel(slug) {
     if (!slug) return "—";
@@ -222,6 +227,65 @@ const App = {
   },
   countryName(code) { const c = (window.COUNTRIES||[]).find(x => x.code === code); return c ? c.name : code; },
   sizeClass(id) { return (window.SIZE_CLASSES||[]).find(s => s.id === id) || null; },
+
+  // ---- currency / FX (base = SAR) ----
+  fxRates: null,
+  async loadFx() {
+    if (App.fxRates) return App.fxRates;
+    try {
+      const c = JSON.parse(sessionStorage.getItem("cpe_fx") || "null");
+      if (c && (Date.now() - c.t) < 6 * 3600 * 1000 && c.rates) { App.fxRates = c.rates; return App.fxRates; }
+    } catch (_) {}
+    try {
+      const r = await fetch("https://open.er-api.com/v6/latest/SAR", { cache: "no-store" });
+      const j = await r.json();
+      if (j && j.rates) { App.fxRates = j.rates; try { sessionStorage.setItem("cpe_fx", JSON.stringify({ t: Date.now(), rates: j.rates })); } catch (_) {} }
+    } catch (_) { App.fxRates = null; }
+    return App.fxRates;
+  },
+  _ccyResolved: null,
+  async resolveCcy() {
+    if (App._ccyResolved) return App._ccyResolved;
+    let c = null; try { c = localStorage.getItem("cpe_ccy"); } catch (_) {}
+    if (!c) { const code = await App.detectCountryCode(); c = App.defaultCcyFor(code || ""); }
+    App._ccyResolved = c; return c;
+  },
+  ccy() { return App._ccyResolved || (function(){ try { return localStorage.getItem("cpe_ccy"); } catch(_) { return null; } })() || "SAR"; },
+  setCcy(c) { App._ccyResolved = c; try { localStorage.setItem("cpe_ccy", c); } catch (_) {} },
+  defaultCcyFor(code) {
+    const EU = ["AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IE","IT","LV","LT","LU","MT","NL","PL","PT","RO","SK","SI","ES","SE"];
+    if (code === "SA") return "SAR"; if (code === "AE") return "AED"; if (code === "BH") return "BHD";
+    if (code === "GB") return "GBP"; if (code === "US") return "USD"; if (EU.includes(code)) return "EUR";
+    return "USD";
+  },
+  // convert an SAR amount into a currency; null if no rate
+  convertSar(amtSar, ccy) {
+    ccy = ccy || App.ccy();
+    if (ccy === "SAR") return amtSar;
+    if (!App.fxRates || !App.fxRates[ccy]) return null;
+    return amtSar * App.fxRates[ccy];
+  },
+  // convert an amount in some currency back to SAR
+  toSar(amt, fromCcy) {
+    if (!fromCcy || fromCcy === "SAR") return amt;
+    if (!App.fxRates || !App.fxRates[fromCcy]) return null;
+    return amt / App.fxRates[fromCcy];
+  },
+  // format an SAR amount in the active currency (falls back to SAR)
+  fmtSar(amtSar, ccy) {
+    ccy = ccy || App.ccy();
+    const v = App.convertSar(amtSar, ccy);
+    if (v == null) return App.money(amtSar, "SAR");
+    return App.money(v, ccy);
+  },
+  // highest discount fraction whose min-qty <= qty
+  discountRate(tiers, qty) {
+    if (!tiers || typeof tiers !== "object") return 0;
+    let best = 0;
+    for (const k in tiers) { if (qty >= Number(k)) best = Math.max(best, Number(tiers[k]) || 0); }
+    return best;
+  },
+
 
   money(n, ccy = "GBP") {
     if (n == null || isNaN(n)) return "—";
@@ -302,12 +366,21 @@ const App = {
           ${link("country-cost.html","Landed cost","cost")}
           <a href="basket.html" id="nav-basket" ${current === "basket" ? 'aria-current="page"' : ""}>Basket</a>
           ${link("account.html","Account","account")}
+          <select id="nav-ccy" aria-label="Currency" style="background:transparent;border:1px solid var(--line,#2a2f37);color:inherit;border-radius:6px;padding:3px 6px;font:inherit;font-size:.8rem"></select>
           <span id="nav-auth"></span>
         </nav>
       </div></header>`;
   },
   async paintNavAuth() {
     App.paintBasketCount();
+    App.loadFx();
+    const cc = document.getElementById("nav-ccy");
+    if (cc && !cc.dataset.ready) {
+      cc.dataset.ready = "1";
+      cc.innerHTML = window.CURRENCIES.map(c => `<option value="${c.code}">${App.esc(c.label)}</option>`).join("");
+      cc.value = await App.resolveCcy();
+      cc.onchange = () => { App.setCcy(cc.value); location.reload(); };
+    }
     const el = document.getElementById("nav-auth"); if (!el) return;
     const s = await this.session();
     if (s) { el.innerHTML = `<a href="#" id="nav-signout">Sign out</a>`;
