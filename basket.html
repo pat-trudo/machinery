@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Basket &amp; landed cost</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .lines{width:100%;border-collapse:collapse;margin-top:8px}
+  .lines th,.lines td{padding:10px 8px;border-bottom:1px solid var(--line,#2a2f37);text-align:left;vertical-align:middle}
+  .lines th{font:600 .72rem/1 "JetBrains Mono",monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .lines input[type=number]{width:100%;min-width:90px}
+  .lineqty{display:flex;align-items:center;gap:6px}
+  .lineqty button{width:30px;height:30px;border-radius:7px;cursor:pointer;line-height:1}
+  .x{cursor:pointer;color:var(--muted);font-size:1.1rem;background:none;border:none}
+  @media (max-width:760px){.lines thead{display:none}.lines td{display:block;border:none;padding:4px 0}.lines tr{display:block;border-bottom:1px solid var(--line,#2a2f37);padding:12px 0}}
+</style>
+</head>
+<body>
+<div id="nav"></div>
+
+<section class="section"><div class="wrap">
+  <p class="eyebrow">Your selection</p>
+  <h1 style="margin:8px 0 6px">Basket &amp; landed cost</h1>
+  <p class="muted" style="max-width:64ch">Set the quantity and your declared unit value for each unit, pick a destination, and we'll
+    estimate freight, import duty and VAT across the whole basket. Indicative only.</p>
+
+  <div id="basket"></div>
+</div></section>
+
+<div id="footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+document.getElementById("nav").innerHTML = App.nav("basket");
+document.getElementById("footer").innerHTML = App.footer();
+App.paintNavAuth();
+
+const root = document.getElementById("basket");
+let RULES = [], RATES = [], VALUES = {};
+
+async function boot(){
+  const [r1, r2] = await Promise.all([
+    sb.from("country_rules").select("*").order("country_name"),
+    sb.from("shipping_rates").select("*"),
+  ]);
+  RULES = r1.data || []; RATES = r2.data || [];
+  renderShell();
+}
+
+function renderShell(){
+  const items = Basket.get();
+  if (!items.length){
+    root.innerHTML = `<div class="card" style="text-align:center;color:var(--muted);padding:48px 22px;margin-top:20px">
+      <p class="mono" style="letter-spacing:.1em">YOUR BASKET IS EMPTY</p>
+      <p style="margin-top:10px">Browse the stock and add the units you need.</p>
+      <p style="margin-top:14px"><a class="btn btn-amber btn-sm" href="index.html">View stock →</a></p></div>`;
+    return;
+  }
+
+  const rows = items.map(it => `
+    <tr data-id="${App.esc(it.id)}">
+      <td><strong>${App.esc(it.model || it.title)}</strong><br><span class="muted" style="font-size:.8rem">${App.esc(App.catLabel(it.category))}</span></td>
+      <td>
+        <div class="lineqty">
+          <button type="button" class="q-minus">–</button>
+          <input type="number" class="q-input" min="1" max="${it.max||99}" value="${it.qty}" style="width:58px;text-align:center">
+          <button type="button" class="q-plus">+</button>
+        </div>
+      </td>
+      <td><input type="number" class="v-input" min="0" step="1000" placeholder="e.g. 420000" value="${VALUES[it.id] != null ? VALUES[it.id] : ""}"></td>
+      <td style="text-align:right"><button class="x" title="Remove" aria-label="Remove">✕</button></td>
+    </tr>`).join("");
+
+  root.innerHTML = `
+    <div class="card" style="margin-top:18px">
+      <table class="lines">
+        <thead><tr><th>Unit</th><th>Qty</th><th>Declared unit value (GBP)</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="muted mono" style="font-size:.7rem;margin-top:10px">Declared value is the price you'd invoice per unit — used only to estimate duty &amp; VAT. We don't store or publish it.</p>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="two">
+        <div class="field"><label for="dest">Destination country</label><select id="dest"></select></div>
+        <div class="field"><label for="origin">Shipping from</label><select id="origin"></select></div>
+      </div>
+      <div class="field" style="max-width:50%"><label for="mode">Freight mode</label><select id="mode"></select></div>
+      <button class="btn btn-amber" id="calc" style="width:100%">Estimate landed cost for basket</button>
+    </div>
+
+    <div id="out"></div>
+
+    <div class="note warn" style="margin-top:22px">
+      <strong>Dual-use &amp; export controls.</strong> Cranes, engines and lifting systems can fall under
+      dual-use or military end-use controls regardless of destination. Screen the end-user and obtain any
+      required export licence before shipping.
+    </div>`;
+
+  // selectors
+  App.fillCountrySelect(document.getElementById("dest"), { includeBlank: true });
+  App.fillOriginSelect(document.getElementById("origin"));
+  App.fillModeSelect(document.getElementById("mode"));
+  App.detectCountryCode().then(code => { if (code) { const d = document.getElementById("dest"); if ([...d.options].some(o=>o.value===code)) d.value = code; } });
+
+  // line interactions
+  root.querySelectorAll("tr[data-id]").forEach(tr => {
+    const id = tr.getAttribute("data-id");
+    const qInput = tr.querySelector(".q-input");
+    const vInput = tr.querySelector(".v-input");
+    tr.querySelector(".q-minus").onclick = () => { Basket.setQty(id, (Number(qInput.value)||1) - 1); renderShell(); };
+    tr.querySelector(".q-plus").onclick  = () => { Basket.setQty(id, (Number(qInput.value)||1) + 1); renderShell(); };
+    qInput.addEventListener("change", () => { Basket.setQty(id, Number(qInput.value)||1); renderShell(); });
+    vInput.addEventListener("input", () => { VALUES[id] = vInput.value === "" ? null : Number(vInput.value); });
+    tr.querySelector(".x").onclick = () => { Basket.remove(id); delete VALUES[id]; renderShell(); };
+  });
+
+  document.getElementById("calc").addEventListener("click", calc);
+}
+
+function calc(){
+  const out = document.getElementById("out");
+  const items = Basket.get();
+  const destCode = document.getElementById("dest").value;
+  const oOpt = document.getElementById("origin").selectedOptions[0];
+  const originCountry = oOpt ? oOpt.getAttribute("data-country") : null;
+  const originLabel = oOpt ? oOpt.textContent.trim() : "";
+  const mode = document.getElementById("mode").value;
+
+  if (!destCode){ out.innerHTML = note("Choose a destination country to price the basket."); return; }
+  const rule = RULES.find(r => r.country_code === destCode) || null;
+
+  if (rule && rule.sanctioned){
+    out.innerHTML = `<div class="card" style="margin-top:18px;border-color:#b3331f">
+      <p class="eyebrow" style="color:#e0563f">Restricted destination</p>
+      <h3 style="margin:6px 0">We can't quote ${App.esc(App.countryName(destCode))}</h3>
+      <p class="muted">This destination is subject to sanctions or comprehensive export restrictions, so we don't produce estimates for it.</p></div>`;
+    return;
+  }
+
+  const ccy = (rule && rule.currency) || "GBP";
+  let sumValue=0, sumFreight=0, sumIns=0, sumCif=0, sumDuty=0, sumVat=0, sumTotal=0, units=0, missingVal=false, anyFreight=false;
+  const lineRows = items.map(it => {
+    const sz = App.sizeClass(it.transport_class) || App.sizeClass("heavy");
+    const rate = RATES.find(r => r.origin_country===originCountry && r.destination_country===destCode && r.mode===mode) || null;
+    if (rate) anyFreight = true;
+    const value = VALUES[it.id]; if (value == null || value === "" ) missingVal = true;
+    const c = App.landed(Number(value)||0, rule, rate, sz, it.category);
+    const q = it.qty || 1; units += q;
+    sumValue += (Number(value)||0)*q; sumFreight += c.freight*q; sumIns += c.insurance*q;
+    sumCif += c.cif*q; sumDuty += c.duty*q; sumVat += c.vat*q; sumTotal += c.total*q;
+    return `<div class="spec-row"><span class="k">${q} × ${App.esc(it.model||it.title)}
+        <small style="font-weight:400;color:var(--muted)">· ${App.pct(c.dutyRate)} duty</small></span>
+        <span class="v">${value==null||value===""?'<span class="muted">value needed</span>':App.money(c.total*q, ccy)}</span></div>`;
+  }).join("");
+
+  const rate0 = RATES.find(r => r.origin_country===originCountry && r.destination_country===destCode && r.mode===mode) || null;
+  const freightNote = rate0 ? `${originLabel} → ${App.countryName(destCode)} · ${mode}${rate0.transit_days ? " · ~"+rate0.transit_days+"d":""}` : "No freight rate configured for this lane yet — freight excluded";
+
+  if (!rule){
+    out.innerHTML = `<div class="card" style="margin-top:18px">
+      <p class="eyebrow">Manual quote needed</p>
+      <h3 style="margin:6px 0">No duty &amp; VAT rules for ${App.esc(App.countryName(destCode))}</h3>
+      <p class="muted">We don't yet have import duty &amp; VAT configured for this destination, so we can't produce a full landed cost automatically.
+      ${anyFreight ? `Indicative freight only: <strong>${App.money(sumFreight, "GBP")}</strong> <small class="muted">(${App.esc(freightNote)})</small>.` : ""}
+      Send it through as a quote request and we'll price it manually.</p>
+      ${quoteBlock(destCode)}</div>`;
+    wireQuote(destCode);
+    return;
+  }
+
+  out.innerHTML = `
+    <div class="card" style="margin-top:18px">
+      <p class="eyebrow">Estimated landed cost · ${App.esc(App.countryName(destCode))} · ${units} unit${units!==1?"s":""}</p>
+      <div class="spec" style="margin:12px 0">
+        ${lineRows}
+        <div class="spec-row" style="border-top:1px dashed var(--line,#2a2f37);margin-top:6px;padding-top:10px"><span class="k">Declared value (all units)</span><span class="v">${App.money(sumValue, ccy)}</span></div>
+        <div class="spec-row"><span class="k">Freight <small style="font-weight:400">(${App.esc(freightNote)})</small></span><span class="v">${anyFreight?App.money(sumFreight, "GBP"):"—"}</span></div>
+        <div class="spec-row"><span class="k">Insurance (≈1%)</span><span class="v">${App.money(sumIns, ccy)}</span></div>
+        <div class="spec-row"><span class="k">CIF basis</span><span class="v">${App.money(sumCif, ccy)}</span></div>
+        <div class="spec-row"><span class="k">Import duty</span><span class="v">${App.money(sumDuty, ccy)}</span></div>
+        <div class="spec-row"><span class="k">Import VAT/tax @ ${App.pct(Number(rule.import_vat_rate)||0)}
+          ${rule.vat_recoverable ? '<span class="badge ok" style="margin-left:6px">recoverable</span>' : '<span class="badge neutral" style="margin-left:6px">non-recoverable</span>'}</span>
+          <span class="v">${App.money(sumVat, ccy)}</span></div>
+        <div class="spec-row" style="border-top:1px solid var(--line,#2a2f37);margin-top:6px;padding-top:10px;font-weight:700"><span class="k">Estimated landed total</span><span class="v">${App.money(sumTotal, ccy)}</span></div>
+      </div>
+      <p class="muted mono" style="font-size:.72rem">Indicative band: ${App.money(sumTotal*0.9, ccy)} – ${App.money(sumTotal*1.15, ccy)}.
+        ${rule.vat_recoverable ? "VAT shown may be recoverable for registered importers — net cost can be lower." : ""}</p>
+      ${missingVal ? `<div class="note warn" style="margin-top:10px">Enter a declared unit value for every line for a complete duty &amp; VAT figure.</div>` : ""}
+      ${rule.conformity_required ? `<p class="muted" style="font-size:.82rem;margin-top:10px"><strong>Conformity:</strong> ${App.esc(rule.conformity_required)}</p>` : ""}
+      ${rule.restrictions_notes ? `<p class="muted" style="font-size:.82rem">${App.esc(rule.restrictions_notes)}</p>` : ""}
+      ${quoteBlock(destCode)}
+    </div>`;
+  wireQuote(destCode);
+}
+
+function quoteBlock(destCode){
+  return `<div style="border-top:1px solid var(--line,#2a2f37);margin-top:16px;padding-top:16px">
+      <p class="eyebrow">Request a firm quote</p>
+      <div class="two">
+        <div class="field"><label for="q-name">Name</label><input id="q-name" type="text"></div>
+        <div class="field"><label for="q-email">Email</label><input id="q-email" type="email"></div>
+      </div>
+      <button class="btn btn-dark" id="q-send" style="width:100%">Send basket as quote request</button>
+    </div>`;
+}
+
+function wireQuote(destCode){
+  const btn = document.getElementById("q-send"); if (!btn) return;
+  btn.onclick = async () => {
+    const name = (document.getElementById("q-name").value||"").trim();
+    const email = (document.getElementById("q-email").value||"").trim();
+    if (!email){ App.toast("Add an email so we can reply", true); return; }
+    const items = Basket.get();
+    const summary = items.map(it => `${it.qty} x ${it.model||it.title}${VALUES[it.id]?` @ ${VALUES[it.id]}`:""}`).join("; ");
+    btn.disabled = true; btn.textContent = "Sending…";
+    const session = await App.session();
+    const { error } = await sb.from("leads").insert({
+      name: name || null, email,
+      category: items[0] ? items[0].category : null,
+      specs: "BASKET QUOTE — " + summary,
+      destination_country: destCode ? App.countryName(destCode) : null,
+      budget_currency: "GBP",
+      user_id: session ? session.user.id : null,
+    });
+    btn.disabled = false; btn.textContent = "Send basket as quote request";
+    if (error){ App.toast("Something went wrong — try again", true); return; }
+    App.toast("Quote request sent — we'll be in touch.");
+  };
+}
+
+function note(msg){ return `<div class="card" style="margin-top:18px"><p class="muted">${msg}</p></div>`; }
+
+boot();
+</script>
+</body>
+</html>

@@ -300,17 +300,41 @@ const App = {
           ${link("index.html","Buy","buy")}
           ${link("sell.html","Sell","sell")}
           ${link("country-cost.html","Landed cost","cost")}
+          <a href="basket.html" id="nav-basket" ${current === "basket" ? 'aria-current="page"' : ""}>Basket</a>
           ${link("account.html","Account","account")}
           <span id="nav-auth"></span>
         </nav>
       </div></header>`;
   },
   async paintNavAuth() {
+    App.paintBasketCount();
     const el = document.getElementById("nav-auth"); if (!el) return;
     const s = await this.session();
     if (s) { el.innerHTML = `<a href="#" id="nav-signout">Sign out</a>`;
       document.getElementById("nav-signout").onclick = (e) => { e.preventDefault(); App.signOut(); }; }
     else { el.innerHTML = ""; }
+  },
+  paintBasketCount() {
+    const el = document.getElementById("nav-basket"); if (!el) return;
+    const n = window.Basket ? Basket.count() : 0;
+    el.textContent = n ? `Basket (${n})` : "Basket";
+  },
+
+  // Shared landed-cost math (mirrors country-cost.html) for ONE unit.
+  // rate may be null (freight omitted). Returns the cost components.
+  landed(value, rule, rate, sz, cat) {
+    value = Number(value) || 0;
+    const tonnes = sz ? sz.tonnes : 0, cbm = sz ? sz.cbm : 0;
+    let freight = 0;
+    if (rate) freight = Number(rate.base_cost||0) + Number(rate.per_ton||0) * tonnes + Number(rate.per_cbm||0) * cbm;
+    const insurance = value * 0.01;
+    const cif = value + freight + insurance;
+    const duties = (rule && rule.duty_rates) || {};
+    const dutyRate = (cat in duties) ? Number(duties[cat]) : (("default" in duties) ? Number(duties.default) : 0);
+    const duty = cif * dutyRate;
+    const vatRate = (rule && Number(rule.import_vat_rate)) || 0;
+    const vat = (cif + duty) * vatRate;
+    return { freight, insurance, cif, dutyRate, duty, vatRate, vat, total: cif + duty + vat };
   },
   footer() {
     const email = (window.APP_CONFIG && window.APP_CONFIG.CONTACT_EMAIL) || "desk@example.com";
@@ -324,3 +348,27 @@ const App = {
   },
 };
 window.App = App;
+
+// ---- Basket (localStorage; persists on the visitor's device) ----------
+window.Basket = {
+  KEY: "cpe_basket",
+  get() { try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch (_) { return []; } },
+  save(items) { try { localStorage.setItem(this.KEY, JSON.stringify(items)); } catch (_) {} if (window.App) App.paintBasketCount(); },
+  add(item) {
+    const items = this.get();
+    const ex = items.find(i => i.id === item.id);
+    const max = item.max || 99;
+    if (ex) ex.qty = Math.min((ex.qty || 1) + (item.qty || 1), max);
+    else items.push({ id: item.id, model: item.model, title: item.title, category: item.category,
+                      transport_class: item.transport_class, qty: Math.min(item.qty || 1, max), max });
+    this.save(items);
+  },
+  setQty(id, qty) {
+    const items = this.get(); const it = items.find(i => i.id === id);
+    if (it) it.qty = Math.max(0, Math.min(qty, it.max || 99));
+    this.save(items.filter(i => i.qty > 0));
+  },
+  remove(id) { this.save(this.get().filter(i => i.id !== id)); },
+  clear() { this.save([]); },
+  count() { return this.get().reduce((n, i) => n + (i.qty || 0), 0); },
+};

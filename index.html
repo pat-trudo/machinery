@@ -191,21 +191,26 @@ function render() {
 
   const el = document.getElementById("listings");
   document.getElementById("listings-empty").classList.toggle("hidden", rows.length > 0);
-  el.innerHTML = rows.map(l => `
+  el.innerHTML = rows.map(l => {
+    const specs = Array.isArray(l.key_specs) ? l.key_specs : [];
+    const cap = (specs.find(s => /capacity/i.test(s.k)) || {}).v;
+    const href = `product.html?id=${encodeURIComponent(l.id)}`;
+    const qty = l.stock_qty == null ? null : Number(l.stock_qty);
+    return `
     <article class="listing">
-      <div class="thumb">${l.image_url ? `<img src="${App.esc(l.image_url)}" alt="" style="position:absolute;inset:0;object-fit:cover;width:100%;height:100%">` : ""}<span class="tag">${App.esc(App.catLabel(l.category))}</span></div>
+      <a href="${href}" class="thumb" style="display:block">${l.image_url ? `<img src="${App.esc(l.image_url)}" alt="" style="position:absolute;inset:0;object-fit:cover;width:100%;height:100%">` : ""}<span class="tag">${App.esc(App.catLabel(l.category))}</span>${qty ? `<span class="tag" style="left:auto;right:10px;background:var(--amber,#F2B705);color:#1a1a1a">${qty} available</span>` : ""}</a>
       <div class="body">
-        <h3>${App.esc(l.title)}</h3>
+        <h3><a href="${href}" style="color:inherit;text-decoration:none">${App.esc(l.title)}</a></h3>
         <div class="meta">
           ${l.manufacturer ? App.esc(l.manufacturer) + " " : ""}${l.model ? App.esc(l.model) : ""}<br>
-          ${l.origin_country ? "Origin: " + App.esc(l.origin_country) + " · " : ""}${l.year || ""}<br>
-          ${l.condition ? App.esc(l.condition) : ""}
+          ${cap ? "Capacity: " + App.esc(cap) + "<br>" : ""}
+          ${l.origin_country ? "Origin: " + App.esc(l.origin_country) + " · " : ""}${l.year || ""}
         </div>
         <div class="flex" style="gap:6px">${l.certification ? `<span class="cert">${App.esc(l.certification)}</span>` : ""}</div>
         <div class="price">${App.esc(l.price_indication || "POA")}</div>
-        <a href="#requirement" class="btn btn-dark btn-sm" onclick="prefill('${l.category}')">Enquire</a>
+        <a href="${href}" class="btn btn-dark btn-sm">View details &amp; add to basket</a>
       </div>
-    </article>`).join("");
+    </article>`; }).join("");
 }
 ["f-cat","f-cert","f-mfr"].forEach(id => document.getElementById(id).addEventListener("change", render));
 
