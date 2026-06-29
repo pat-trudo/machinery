@@ -45,6 +45,7 @@ function isPdf(u){ return u && /\.pdf(\?|#|$)/i.test(u); }
 
 async function boot(){
   if (!id){ wrap.innerHTML = card("No unit specified. Return to the stock list."); return; }
+  await App.loadFx(); await App.resolveCcy();
   const { data: l, error } = await sb.from("listings").select("*").eq("id", id).single();
   if (error || !l){ wrap.innerHTML = card("That unit could not be found — it may have been sold or paused."); return; }
 
@@ -99,7 +100,11 @@ async function boot(){
           </div>
           <button class="btn btn-amber" id="add" style="width:100%;margin-top:14px">Add to basket</button>
           <a class="btn btn-ghost btn-sm" href="basket.html" style="width:100%;margin-top:8px;text-align:center">Go to basket &amp; price destination →</a>
-          <p class="muted mono" style="font-size:.7rem;margin-top:10px">Price on application. You enter your own declared unit value in the basket for the landed-cost estimate.</p>
+          ${l.price_sar
+            ? `<div style="margin-top:12px;text-align:center"><div style="font-weight:700;font-size:1.25rem">${App.fmtSar(l.price_sar)}<span class="muted" style="font-weight:400;font-size:.8rem"> per unit</span></div>
+                 <div class="muted mono" style="font-size:.7rem;margin-top:4px">Quoted in SAR${App.ccy()!=="SAR"?" · shown in "+App.esc(App.ccy())+" at live rates":""}</div>
+                 ${(l.key_specs && false) ? "" : ""}${(l.discount_tiers && Object.keys(l.discount_tiers).length) ? `<div class="badge ok" style="margin-top:8px">Up to ${App.pct(Math.max.apply(null, Object.values(l.discount_tiers).map(Number)))} off on multiples — applied in basket</div>` : ""}</div>`
+            : `<p class="muted mono" style="font-size:.7rem;margin-top:10px">Price on application.</p>`}
         </div>
       </div>
     </div>`;
