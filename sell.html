@@ -107,7 +107,7 @@ const PHOTOS = APP_CONFIG.PHOTOS_BUCKET, DOCS = APP_CONFIG.DOCS_BUCKET;
 document.getElementById("nav").innerHTML = App.nav("sell");
 document.getElementById("footer").innerHTML = App.footer();
 App.paintNavAuth();
-document.getElementById("s-cat").innerHTML = window.CATEGORIES.map(c => `<option value="${c.slug}">${c.label}</option>`).join("");
+App.fillCategorySelect(document.getElementById("s-cat"));
 
 // ---- tabs ----
 const tabIn = document.getElementById("tab-in"), tabUp = document.getElementById("tab-up");
@@ -177,7 +177,7 @@ document.getElementById("sub-form").addEventListener("submit", async (e) => {
   }
 
   document.getElementById("sub-form").reset();
-  document.getElementById("s-cat").innerHTML = window.CATEGORIES.map(c => `<option value="${c.slug}">${c.label}</option>`).join("");
+  App.fillCategorySelect(document.getElementById("s-cat"));
   btn.disabled = false; btn.textContent = "Submit for review";
   App.toast("Submitted for review.");
   loadSubs(uid);

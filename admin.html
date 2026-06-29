@@ -199,7 +199,7 @@ function openPromote(d){
     <p class="muted" style="font-size:.85rem;margin:6px 0 14px">Clear any field you don't want to expose publicly. Seller identity is never copied across.</p>
     <div class="two">
       <div class="field"><label>Title</label><input id="pr-title" value="${App.esc(d.title)}"></div>
-      <div class="field"><label>Category</label><input id="pr-cat" value="${App.esc(d.category)}"></div>
+      <div class="field"><label>Category</label><select id="pr-cat"></select></div>
     </div>
     <div class="two">
       <div class="field"><label>Manufacturer</label><input id="pr-mfr" value="${App.esc(d.manufacturer||"")}"></div>
@@ -216,10 +216,12 @@ function openPromote(d){
     <div class="field"><label>Price indication (free text)</label><input id="pr-price" placeholder="e.g. ~€420,000 or POA"></div>
     <div class="field"><label>Public teaser blurb</label><textarea id="pr-teaser">${App.esc(d.specs||"")}</textarea></div>
     <button class="btn btn-amber" id="pr-go">Create public listing</button>`;
+  App.fillCategorySelect(document.getElementById("pr-cat"));
+  document.getElementById("pr-cat").value = d.category || "";
   document.getElementById("pr-cancel").onclick = () => box.classList.add("hidden");
   document.getElementById("pr-go").onclick = async () => {
     const rec = {
-      title: v("pr-title"), category: v("pr-cat") || "mobile_crane",
+      title: v("pr-title"), category: v("pr-cat") || d.category || "crawler_excavator",
       manufacturer: v("pr-mfr")||null, model: v("pr-model")||null,
       year: v("pr-year")?Number(v("pr-year")):null, condition: v("pr-cond")||null,
       origin_country: v("pr-origin")||null, certification: v("pr-cert")||null,

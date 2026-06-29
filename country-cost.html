@@ -32,10 +32,7 @@
           <div class="field"><label for="mode">Freight mode</label><select id="mode"></select></div>
         </div>
         <div class="field"><label for="value">Declared unit value (GBP)</label><input id="value" type="number" min="0" step="1000" placeholder="e.g. 135000" /></div>
-        <div class="two">
-          <div class="field"><label for="tonnes">Weight (tonnes)</label><input id="tonnes" type="number" min="0" step="0.5" placeholder="optional" /></div>
-          <div class="field"><label for="cbm">Volume (m³)</label><input id="cbm" type="number" min="0" step="1" placeholder="optional" /></div>
-        </div>
+        <div class="field"><label for="size">Rough machine size</label><select id="size"></select></div>
         <button class="btn btn-amber" id="calc" style="width:100%">Estimate landed cost</button>
         <p class="muted mono" style="font-size:.72rem;margin:12px 0 0">
           Freight uses our placeholder route rates; duty &amp; VAT use the destination's current rules.
@@ -74,8 +71,9 @@ document.getElementById("nav").innerHTML = App.nav("cost");
 document.getElementById("footer").innerHTML = App.footer();
 App.paintNavAuth();
 
-document.getElementById("cat").innerHTML = window.CATEGORIES.map(c => `<option value="${c.slug}">${c.label}</option>`).join("");
-document.getElementById("mode").innerHTML = window.MODES.map(m => `<option value="${m.slug}">${m.label}</option>`).join("");
+App.fillCategorySelect(document.getElementById("cat"));
+App.fillModeSelect(document.getElementById("mode"));
+App.fillSizeSelect(document.getElementById("size"));
 
 let RULES = [], RATES = [];
 
@@ -86,14 +84,12 @@ async function boot() {
   ]);
   RULES = r1.data || []; RATES = r2.data || [];
 
-  document.getElementById("dest").innerHTML =
-    `<option value="">Select…</option>` +
-    RULES.map(r => `<option value="${r.country_code}">${App.esc(r.country_name)}</option>`).join("");
+  // Destination: full alphabetical country list, visitor's country bubbled to top.
+  const topCode = await App.detectCountryCode();
+  App.fillCountrySelect(document.getElementById("dest"), { includeBlank: !topCode, topCode });
 
-  const origins = [...new Set(RATES.map(r => r.origin_country))];
-  const def = (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_ORIGIN) || origins[0];
-  document.getElementById("origin").innerHTML =
-    (origins.length ? origins : [def]).map(o => `<option value="${o}" ${o===def?"selected":""}>${o}</option>`).join("");
+  // Shipping from: GCC origin cities (mapped to a country for rate lookup).
+  App.fillOriginSelect(document.getElementById("origin"));
 }
 
 document.getElementById("calc").addEventListener("click", () => {
@@ -102,6 +98,40 @@ document.getElementById("calc").addEventListener("click", () => {
   if (!destCode) { out.innerHTML = card("Pick a destination country first."); return; }
   const rule = RULES.find(r => r.country_code === destCode);
   const value = Number(document.getElementById("value").value) || 0;
+
+  // resolve inputs
+  const originOpt = document.getElementById("origin").selectedOptions[0];
+  const originCountry = originOpt ? originOpt.getAttribute("data-country") : null;
+  const originLabel = originOpt ? originOpt.textContent : "";
+  const mode = document.getElementById("mode").value;
+  const cat = document.getElementById("cat").value;
+  const sz = App.sizeClass(document.getElementById("size").value);
+  const tonnes = sz ? sz.tonnes : 0;
+  const cbm = sz ? sz.cbm : 0;
+
+  // freight (works even without a country rule)
+  const rate = RATES.find(r => r.origin_country === originCountry && r.destination_country === destCode && r.mode === mode);
+  let freight = 0, freightNote = "";
+  if (rate) {
+    freight = Number(rate.base_cost) + Number(rate.per_ton) * tonnes + Number(rate.per_cbm) * cbm;
+    freightNote = `${originLabel} → ${App.countryName(destCode)} · ${mode}${rate.transit_days ? " · ~" + rate.transit_days + "d" : ""}`;
+  } else {
+    freightNote = "No freight rate configured for this lane yet";
+  }
+
+  // ---- destination not configured: no duty/VAT rules ----
+  if (!rule) {
+    out.innerHTML = `
+      <div class="card">
+        <span class="badge amber">Manual quote needed</span>
+        <h2 style="margin:14px 0 8px">${App.esc(App.countryName(destCode))}</h2>
+        <p>We don't yet have import duty &amp; VAT rules configured for this destination, so we can't
+        produce a full landed-cost breakdown automatically.</p>
+        ${rate ? `<div class="spec" style="margin-top:14px"><div class="spec-row"><span class="k">Indicative freight <small style="font-weight:400">(${App.esc(freightNote)})</small></span><span class="v">${App.money(freight)}</span></div></div>` : ""}
+        <div class="note info" style="margin-top:14px">Send us this requirement and we'll return a manual landed-cost quote for ${App.esc(App.countryName(destCode))}.</div>
+      </div>`;
+    return;
+  }
 
   // ---- sanctioned destination: refuse ----
   if (rule.sanctioned) {
@@ -121,22 +151,6 @@ document.getElementById("calc").addEventListener("click", () => {
 
   if (!value) { out.innerHTML = card("Enter a declared unit value to estimate duty &amp; VAT."); return; }
 
-  const origin = document.getElementById("origin").value;
-  const mode = document.getElementById("mode").value;
-  const cat = document.getElementById("cat").value;
-  const tonnes = Number(document.getElementById("tonnes").value) || 0;
-  const cbm = Number(document.getElementById("cbm").value) || 0;
-
-  // ---- freight ----
-  const rate = RATES.find(r => r.origin_country === origin && r.destination_country === destCode && r.mode === mode);
-  let freight = 0, freightNote = "";
-  if (rate) {
-    freight = Number(rate.base_cost) + Number(rate.per_ton) * tonnes + Number(rate.per_cbm) * cbm;
-    freightNote = `${origin} → ${destCode} · ${mode}${rate.transit_days ? " · ~" + rate.transit_days + "d" : ""}`;
-  } else {
-    freightNote = "No rate configured for this route — freight excluded";
-  }
-
   // ---- duty + VAT on a CIF basis ----
   const insurance = value * 0.01;            // est. 1% marine insurance
   const cif = value + freight + insurance;
@@ -151,6 +165,7 @@ document.getElementById("calc").addEventListener("click", () => {
   out.innerHTML = `
     <div class="card spec">
       <div class="spec-head"><span>LANDED COST · ${App.esc(rule.country_name).toUpperCase()}</span><span>${App.esc(App.catLabel(cat))}</span></div>
+      ${sz ? `<div class="spec-row"><span class="k">Rough size</span><span class="v" style="font-weight:400">${App.esc(sz.label)}</span></div>` : ""}
       <div class="spec-row"><span class="k">Declared value</span><span class="v">${App.money(value)}</span></div>
       <div class="spec-row"><span class="k">Freight <small style="font-weight:400">(${App.esc(freightNote)})</small></span><span class="v">${rate ? App.money(freight) : "—"}</span></div>
       <div class="spec-row"><span class="k">Insurance (≈1%)</span><span class="v">${App.money(insurance)}</span></div>
