@@ -59,8 +59,8 @@ async function boot(){
   if (isPdf(l.brochure_url)) {
     brochure = `<div class="brochure">
         <iframe src="${App.esc(l.brochure_url)}" title="Manufacturer brochure" loading="lazy"></iframe>
-        <p style="margin-top:10px"><a class="btn btn-dark btn-sm" href="${App.esc(l.brochure_url)}" target="_blank" rel="noopener">Open brochure (PDF) ↗</a>
-        ${l.source_url ? `<a class="btn btn-ghost btn-sm" href="${App.esc(l.source_url)}" target="_blank" rel="noopener" style="margin-left:8px">Manufacturer page ↗</a>` : ""}</p>
+        <p style="margin-top:10px"><a class="btn btn-dark btn-sm" href="${App.esc(l.brochure_url)}" download>Download brochure (PDF) ↓</a>
+        <a class="btn btn-ghost btn-sm" href="${App.esc(l.brochure_url)}" target="_blank" rel="noopener" style="margin-left:8px">Open in new tab ↗</a></p>
         <p class="muted mono" style="font-size:.7rem;margin-top:6px">Brochure hosted by the manufacturer. If it does not display here, use the button above.</p>
       </div>`;
   } else if (l.source_url) {
@@ -74,6 +74,7 @@ async function boot(){
   }
 
   wrap.innerHTML = `
+    ${l.image_url ? `<div style="margin:14px 0 0;border-radius:12px;overflow:hidden;border:1px solid var(--line,#2a2f37)"><img src="${App.esc(l.image_url)}" alt="${App.esc(l.title)}" style="width:100%;max-height:440px;object-fit:cover;display:block"></div>` : ""}
     <div class="pgrid">
       <div>${brochure}</div>
       <div>
@@ -81,6 +82,7 @@ async function boot(){
         <h1 style="margin:8px 0 6px">${App.esc(l.title)}</h1>
         <div class="flex" style="gap:8px;margin-bottom:12px">
           ${l.certification ? `<span class="cert">${App.esc(l.certification)}</span>` : ""}
+          ${l.current_location ? `<span class="badge neutral">Located: ${App.esc(l.current_location)}</span>` : ""}
           ${l.origin_country ? `<span class="badge neutral">Origin: ${App.esc(l.origin_country)}</span>` : ""}
           ${l.condition ? `<span class="badge neutral">${App.esc(l.condition)}</span>` : ""}
         </div>
