@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin · master desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="nav"></div>
+
+<section class="section">
+  <div class="wrap">
+
+    <!-- LOGIN (signed out) -->
+    <div id="login" class="card hidden" style="max-width:420px;margin:0 auto">
+      <p class="eyebrow">Master login</p>
+      <h2 style="margin:8px 0 16px">Admin sign in</h2>
+      <div class="field"><label for="a-email">Email</label><input id="a-email" type="email" /></div>
+      <div class="field"><label for="a-pw">Password</label><input id="a-pw" type="password" /></div>
+      <button class="btn btn-dark" id="a-in" style="width:100%">Sign in</button>
+    </div>
+
+    <!-- DENIED (signed in, not admin) -->
+    <div id="denied" class="card hidden" style="max-width:460px;margin:0 auto;border-color:var(--danger)">
+      <span class="badge warn">Access denied</span>
+      <h2 style="margin:12px 0 8px">This area is admin-only</h2>
+      <p class="muted">Your account doesn't have admin rights. If that's wrong, ask an existing admin to grant your role.</p>
+      <button class="btn btn-ghost btn-sm" id="d-out" style="margin-top:14px">Sign out</button>
+    </div>
+
+    <!-- DASHBOARD (admin) -->
+    <div id="app" class="hidden">
+      <div class="flex between" style="margin-bottom:18px">
+        <div><p class="eyebrow">Master desk</p><h1 style="margin-top:6px">Operations</h1></div>
+        <button class="btn btn-ghost btn-sm" id="out">Sign out</button>
+      </div>
+
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-pane="dash">Dashboard</button>
+        <button class="tab" data-pane="leads">Leads</button>
+        <button class="tab" data-pane="subs">Submissions</button>
+        <button class="tab" data-pane="rates">Shipping rates</button>
+        <button class="tab" data-pane="rules">Country rules</button>
+      </div>
+
+      <!-- DASH -->
+      <div class="pane" id="pane-dash">
+        <div id="stat-leads" class="grid"></div>
+      </div>
+
+      <!-- LEADS -->
+      <div class="pane hidden" id="pane-leads">
+        <h3 style="margin-bottom:12px">All leads <span class="badge neutral" id="c-leads"></span></h3>
+        <div class="table-wrap"><table id="t-leads"></table></div>
+      </div>
+
+      <!-- SUBMISSIONS -->
+      <div class="pane hidden" id="pane-subs">
+        <h3 style="margin-bottom:12px">All submissions <span class="badge neutral" id="c-subs"></span></h3>
+        <div class="table-wrap"><table id="t-subs"></table></div>
+        <div id="promote" class="hidden card" style="margin-top:20px"></div>
+      </div>
+
+      <!-- SHIPPING RATES -->
+      <div class="pane hidden" id="pane-rates">
+        <div class="flex between" style="margin-bottom:12px">
+          <h3>Shipping rates <span class="muted" style="font-weight:400;font-size:.85rem">— edit, then Save each row</span></h3>
+          <button class="btn btn-amber btn-sm" id="add-rate">+ Add route</button>
+        </div>
+        <div class="table-wrap"><table id="t-rates"></table></div>
+        <p class="muted mono" style="font-size:.72rem;margin-top:10px">freight = base + per_ton·tonnes + per_cbm·m³</p>
+      </div>
+
+      <!-- COUNTRY RULES -->
+      <div class="pane hidden" id="pane-rules">
+        <div class="flex between" style="margin-bottom:12px">
+          <h3>Country rules <span class="muted" style="font-weight:400;font-size:.85rem">— edit, then Save each row</span></h3>
+          <button class="btn btn-amber btn-sm" id="add-rule">+ Add country</button>
+        </div>
+        <div class="table-wrap"><table id="t-rules"></table></div>
+        <p class="muted mono" style="font-size:.72rem;margin-top:10px">duty_rates is JSON keyed by category slug, e.g. {"mobile_crane":0,"default":0.05}. Set sanctioned=true to make the tool refuse a destination.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div id="footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+document.getElementById("nav").innerHTML = App.nav("admin");
+document.getElementById("footer").innerHTML = App.footer();
+App.paintNavAuth();
+
+document.getElementById("a-in").onclick = async () => {
+  const { error } = await sb.auth.signInWithPassword({ email: v("a-email"), password: v("a-pw") });
+  if (error) return App.toast(error.message, true);
+  gate();
+};
+document.getElementById("out").onclick = () => App.signOut();
+document.getElementById("d-out").onclick = () => App.signOut();
+
+// tabs
+document.querySelectorAll("#tabs .tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll("#tabs .tab").forEach(x => x.classList.remove("active"));
+  t.classList.add("active");
+  document.querySelectorAll(".pane").forEach(p => p.classList.add("hidden"));
+  document.getElementById("pane-" + t.dataset.pane).classList.remove("hidden");
+});
+
+// ---- gate: admin only ----
+async function gate() {
+  const s = await App.session();
+  const show = (id) => ["login","denied","app"].forEach(x => document.getElementById(x).classList.toggle("hidden", x !== id));
+  if (!s) return show("login");
+  const prof = await App.profile();
+  if (!prof || prof.role !== "admin") return show("denied");
+  show("app");
+  loadAll();
+}
+
+async function loadAll() {
+  const [leads, subs, listings, matches] = await Promise.all([
+    sb.from("leads").select("*").order("created_at", { ascending: false }),
+    sb.from("machinery_submissions").select("*").order("created_at", { ascending: false }),
+    sb.from("listings").select("*").order("created_at", { ascending: false }),
+    sb.from("matches").select("*"),
+  ]);
+  paintStats({ leads: leads.data||[], subs: subs.data||[], listings: listings.data||[], matches: matches.data||[] });
+  paintLeads(leads.data||[]);
+  paintSubs(subs.data||[]);
+  loadRates();
+  loadRules();
+}
+
+// ---- dashboard stats + 30/90 trends ----
+function within(rows, days){ const cut = Date.now() - days*864e5; return rows.filter(r => new Date(r.created_at).getTime() >= cut).length; }
+function paintStats(d){
+  const block = (label, rows) => `
+    <div class="stat">
+      <div class="n">${rows.length}</div>
+      <div class="l">${label} · total</div>
+      <div class="trend">30d <strong>${within(rows,30)}</strong> &nbsp;·&nbsp; 90d <strong>${within(rows,90)}</strong></div>
+    </div>`;
+  const wrap = document.getElementById("stat-leads");
+  wrap.className = "stats";
+  wrap.innerHTML = block("Leads", d.leads) + block("Submissions", d.subs) + block("Listings", d.listings) + block("Matches", d.matches);
+}
+
+// ---- leads table ----
+function paintLeads(rows){
+  document.getElementById("c-leads").textContent = rows.length;
+  const t = document.getElementById("t-leads");
+  t.innerHTML = `<thead><tr><th>Date</th><th>Name</th><th>Email</th><th>Category</th><th>Destination</th><th>Budget</th><th>Timeline</th><th>Specs</th></tr></thead><tbody>` +
+    rows.map(l => `<tr>
+      <td>${App.date(l.created_at)}</td><td>${App.esc(l.name)}</td><td>${App.esc(l.email)}</td>
+      <td>${App.esc(App.catLabel(l.category))}</td><td>${App.esc(l.destination_country||"—")}</td>
+      <td>${l.max_budget?App.money(l.max_budget,l.budget_currency||"GBP"):"—"}</td>
+      <td>${App.esc(l.timeline||"—")}</td><td style="white-space:normal;max-width:280px">${App.esc(l.specs||"")}</td>
+    </tr>`).join("") + `</tbody>`;
+}
+
+// ---- submissions table + promote ----
+function paintSubs(rows){
+  document.getElementById("c-subs").textContent = rows.length;
+  const t = document.getElementById("t-subs");
+  t.innerHTML = `<thead><tr><th>Date</th><th>Title</th><th>Category</th><th>Make/Model</th><th>Year</th><th>Hrs</th><th>Origin</th><th>Asking</th><th>Files</th><th>Status</th><th></th></tr></thead><tbody>` +
+    rows.map(d => `<tr>
+      <td>${App.date(d.created_at)}</td><td>${App.esc(d.title)}</td><td>${App.esc(App.catLabel(d.category))}</td>
+      <td>${App.esc(d.manufacturer||"")} ${App.esc(d.model||"")}</td><td>${d.year||""}</td><td>${d.hours||""}</td>
+      <td>${App.esc(d.origin_country||"")}</td><td>${d.asking_price?App.money(d.asking_price,d.currency||"EUR"):"—"}</td>
+      <td>${(d.photos||[]).length}/${(d.docs||[]).length}</td>
+      <td>
+        <select data-status="${d.id}" class="sub-status">
+          ${["submitted","under_review","approved","rejected","listed"].map(s=>`<option ${d.status===s?"selected":""}>${s}</option>`).join("")}
+        </select>
+      </td>
+      <td><button class="btn btn-amber btn-sm" data-promote="${d.id}">Promote →</button></td>
+    </tr>`).join("") + `</tbody>`;
+
+  t.querySelectorAll(".sub-status").forEach(sel => sel.onchange = async () => {
+    const { error } = await sb.from("machinery_submissions").update({ status: sel.value }).eq("id", sel.dataset.status);
+    App.toast(error ? error.message : "Status updated", !!error);
+  });
+  t.querySelectorAll("[data-promote]").forEach(b => b.onclick = () => openPromote(rows.find(r => r.id === b.dataset.promote)));
+}
+
+function openPromote(d){
+  const box = document.getElementById("promote");
+  box.classList.remove("hidden");
+  box.scrollIntoView({ behavior: "smooth" });
+  box.innerHTML = `
+    <div class="flex between"><h3>Promote to public teaser</h3><button class="btn btn-ghost btn-sm" id="pr-cancel">Close</button></div>
+    <p class="muted" style="font-size:.85rem;margin:6px 0 14px">Clear any field you don't want to expose publicly. Seller identity is never copied across.</p>
+    <div class="two">
+      <div class="field"><label>Title</label><input id="pr-title" value="${App.esc(d.title)}"></div>
+      <div class="field"><label>Category</label><input id="pr-cat" value="${App.esc(d.category)}"></div>
+    </div>
+    <div class="two">
+      <div class="field"><label>Manufacturer</label><input id="pr-mfr" value="${App.esc(d.manufacturer||"")}"></div>
+      <div class="field"><label>Model</label><input id="pr-model" value="${App.esc(d.model||"")}"></div>
+    </div>
+    <div class="two">
+      <div class="field"><label>Year</label><input id="pr-year" value="${d.year||""}"></div>
+      <div class="field"><label>Condition</label><input id="pr-cond" value="${App.esc(d.condition||"")}"></div>
+    </div>
+    <div class="two">
+      <div class="field"><label>Origin country</label><input id="pr-origin" value="${App.esc(d.origin_country||"")}"></div>
+      <div class="field"><label>Certification</label><input id="pr-cert" value="${App.esc(d.certification||"")}"></div>
+    </div>
+    <div class="field"><label>Price indication (free text)</label><input id="pr-price" placeholder="e.g. ~€420,000 or POA"></div>
+    <div class="field"><label>Public teaser blurb</label><textarea id="pr-teaser">${App.esc(d.specs||"")}</textarea></div>
+    <button class="btn btn-amber" id="pr-go">Create public listing</button>`;
+  document.getElementById("pr-cancel").onclick = () => box.classList.add("hidden");
+  document.getElementById("pr-go").onclick = async () => {
+    const rec = {
+      title: v("pr-title"), category: v("pr-cat") || "mobile_crane",
+      manufacturer: v("pr-mfr")||null, model: v("pr-model")||null,
+      year: v("pr-year")?Number(v("pr-year")):null, condition: v("pr-cond")||null,
+      origin_country: v("pr-origin")||null, certification: v("pr-cert")||null,
+      price_indication: v("pr-price")||null, teaser: v("pr-teaser")||null,
+      status: "active", source_submission_id: d.id,
+    };
+    const { error } = await sb.from("listings").insert(rec);
+    if (error) return App.toast(error.message, true);
+    await sb.from("machinery_submissions").update({ status: "listed" }).eq("id", d.id);
+    App.toast("Listing published & submission marked 'listed'.");
+    box.classList.add("hidden");
+    loadAll();
+  };
+}
+
+// ---- editable SHIPPING RATES ----
+async function loadRates(){
+  const { data } = await sb.from("shipping_rates").select("*").order("origin_country");
+  const t = document.getElementById("t-rates");
+  const head = `<thead><tr><th>Origin</th><th>Dest</th><th>Mode</th><th>Base</th><th>Per ton</th><th>Per m³</th><th>Ccy</th><th>Days</th><th>Notes</th><th></th></tr></thead>`;
+  t.innerHTML = head + `<tbody>` + (data||[]).map(r => rateRow(r)).join("") + `</tbody>`;
+  bindRates(t);
+}
+function rateRow(r){
+  return `<tr data-id="${r.id}">
+    <td><input value="${App.esc(r.origin_country)}" data-f="origin_country" size="3"></td>
+    <td><input value="${App.esc(r.destination_country)}" data-f="destination_country" size="3"></td>
+    <td><select data-f="mode">${["sea","air","road"].map(m=>`<option ${r.mode===m?"selected":""}>${m}</option>`).join("")}</select></td>
+    <td><input value="${r.base_cost}" data-f="base_cost" size="7"></td>
+    <td><input value="${r.per_ton}" data-f="per_ton" size="5"></td>
+    <td><input value="${r.per_cbm}" data-f="per_cbm" size="5"></td>
+    <td><input value="${App.esc(r.currency)}" data-f="currency" size="3"></td>
+    <td><input value="${r.transit_days||""}" data-f="transit_days" size="3"></td>
+    <td><input value="${App.esc(r.notes||"")}" data-f="notes" style="min-width:200px"></td>
+    <td class="flex"><button class="btn btn-dark btn-sm" data-save>Save</button><button class="btn btn-ghost btn-sm" data-del>Del</button></td>
+  </tr>`;
+}
+function bindRates(t){
+  t.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => {
+    const tr = b.closest("tr"); const upd = collect(tr, ["base_cost","per_ton","per_cbm","transit_days"]);
+    const { error } = await sb.from("shipping_rates").update({ ...upd, updated_at: new Date().toISOString() }).eq("id", tr.dataset.id);
+    App.toast(error ? error.message : "Rate saved", !!error);
+  });
+  t.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    const tr = b.closest("tr");
+    if (!confirm("Delete this route?")) return;
+    const { error } = await sb.from("shipping_rates").delete().eq("id", tr.dataset.id);
+    if (error) return App.toast(error.message, true);
+    tr.remove(); App.toast("Route deleted");
+  });
+}
+document.getElementById("add-rate").onclick = async () => {
+  const { error } = await sb.from("shipping_rates").insert({ origin_country:"SA", destination_country:"GB", mode:"sea", base_cost:0, currency:"GBP" });
+  App.toast(error ? error.message : "Route added — edit it below", !!error);
+  loadRates();
+};
+
+// ---- editable COUNTRY RULES ----
+async function loadRules(){
+  const { data } = await sb.from("country_rules").select("*").order("country_name");
+  const t = document.getElementById("t-rules");
+  const head = `<thead><tr><th>Code</th><th>Name</th><th>duty_rates (JSON)</th><th>VAT</th><th>Recov?</th><th>Conformity</th><th>Restrictions</th><th>Dual-use</th><th>Sanctioned</th><th></th></tr></thead>`;
+  t.innerHTML = head + `<tbody>` + (data||[]).map(r => ruleRow(r)).join("") + `</tbody>`;
+  bindRules(t);
+}
+function ruleRow(r){
+  return `<tr data-id="${r.id}">
+    <td><input value="${App.esc(r.country_code)}" data-f="country_code" size="3"></td>
+    <td><input value="${App.esc(r.country_name)}" data-f="country_name" style="min-width:140px"></td>
+    <td><input value='${App.esc(JSON.stringify(r.duty_rates))}' data-f="duty_rates" data-json="1" style="min-width:200px"></td>
+    <td><input value="${r.import_vat_rate}" data-f="import_vat_rate" size="4"></td>
+    <td style="text-align:center"><input type="checkbox" data-f="vat_recoverable" ${r.vat_recoverable?"checked":""}></td>
+    <td><input value="${App.esc(r.conformity_required||"")}" data-f="conformity_required" style="min-width:160px"></td>
+    <td><input value="${App.esc(r.restrictions_notes||"")}" data-f="restrictions_notes" style="min-width:160px"></td>
+    <td><input value="${App.esc(r.dual_use_note||"")}" data-f="dual_use_note" style="min-width:160px"></td>
+    <td style="text-align:center"><input type="checkbox" data-f="sanctioned" ${r.sanctioned?"checked":""}></td>
+    <td class="flex"><button class="btn btn-dark btn-sm" data-save>Save</button><button class="btn btn-ghost btn-sm" data-del>Del</button></td>
+  </tr>`;
+}
+function bindRules(t){
+  t.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => {
+    const tr = b.closest("tr");
+    let upd;
+    try { upd = collect(tr, ["import_vat_rate"]); }
+    catch (e) { return App.toast(e.message, true); }
+    const { error } = await sb.from("country_rules").update({ ...upd, updated_at: new Date().toISOString() }).eq("id", tr.dataset.id);
+    App.toast(error ? error.message : "Rule saved", !!error);
+  });
+  t.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    const tr = b.closest("tr");
+    if (!confirm("Delete this country rule?")) return;
+    const { error } = await sb.from("country_rules").delete().eq("id", tr.dataset.id);
+    if (error) return App.toast(error.message, true);
+    tr.remove(); App.toast("Country rule deleted");
+  });
+}
+document.getElementById("add-rule").onclick = async () => {
+  const { error } = await sb.from("country_rules").insert({ country_code:"XX", country_name:"New country", duty_rates:{default:0}, import_vat_rate:0 });
+  App.toast(error ? error.message : "Country added — edit it below", !!error);
+  loadRules();
+};
+
+// collect inputs in a row into an object; numFields -> Number; data-json -> JSON.parse; checkbox -> bool
+function collect(tr, numFields){
+  const o = {};
+  tr.querySelectorAll("[data-f]").forEach(inp => {
+    const f = inp.dataset.f;
+    if (inp.type === "checkbox") o[f] = inp.checked;
+    else if (inp.dataset.json) { try { o[f] = JSON.parse(inp.value); } catch(e){ throw new Error("Invalid JSON in "+f); } }
+    else if (numFields && numFields.includes(f)) o[f] = inp.value === "" ? null : Number(inp.value);
+    else o[f] = inp.value;
+  });
+  return o;
+}
+
+function v(id){ return document.getElementById(id).value.trim(); }
+sb.auth.onAuthStateChange(() => gate());
+gate();
+</script>
+</body>
+</html>
