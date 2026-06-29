@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sell machinery — seller desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="nav"></div>
+
+<section class="section">
+  <div class="wrap">
+    <p class="eyebrow">Seller desk</p>
+    <h1 style="margin:10px 0 8px">List a unit with us</h1>
+    <p class="muted" style="max-width:64ch">
+      Submissions are <strong>private</strong>. They go to our desk for review — they are
+      not published anywhere and your identity is never shown publicly. If we take a unit
+      to market, we create an anonymised teaser only with your agreement.
+    </p>
+
+    <!-- AUTH (shown when signed out) -->
+    <div id="auth" class="card" style="max-width:460px;margin-top:28px">
+      <div class="tabs">
+        <button class="tab active" id="tab-in">Sign in</button>
+        <button class="tab" id="tab-up">Create account</button>
+      </div>
+      <div id="pane-in">
+        <div class="field"><label for="in-email">Email</label><input id="in-email" type="email" /></div>
+        <div class="field"><label for="in-pw">Password</label><input id="in-pw" type="password" /></div>
+        <button class="btn btn-dark" id="do-in" style="width:100%">Sign in</button>
+      </div>
+      <div id="pane-up" class="hidden">
+        <div class="field"><label for="up-name">Full name</label><input id="up-name" /></div>
+        <div class="field"><label for="up-email">Email</label><input id="up-email" type="email" /></div>
+        <div class="field"><label for="up-pw">Password</label><input id="up-pw" type="password" placeholder="8+ characters" /></div>
+        <button class="btn btn-amber" id="do-up" style="width:100%">Create seller account</button>
+        <p class="muted mono" style="font-size:.7rem;margin-top:10px">You may need to confirm your email before signing in.</p>
+      </div>
+    </div>
+
+    <!-- APP (shown when signed in) -->
+    <div id="app" class="hidden" style="margin-top:28px">
+      <div class="flex between" style="margin-bottom:20px">
+        <p class="mono muted" id="who" style="font-size:.85rem"></p>
+        <button class="btn btn-ghost btn-sm" id="signout">Sign out</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.05fr .95fr;gap:36px;align-items:start">
+        <!-- SUBMISSION FORM -->
+        <div class="card">
+          <h3 style="margin-bottom:16px">Submit a unit</h3>
+          <form id="sub-form">
+            <div class="field"><label for="s-title">Title</label><input id="s-title" required placeholder="e.g. All-terrain crane 100 t" /></div>
+            <div class="two">
+              <div class="field"><label for="s-cat">Category</label><select id="s-cat" required></select></div>
+              <div class="field"><label for="s-cond">Condition</label>
+                <select id="s-cond"><option>Used — as new</option><option>Used — excellent</option><option>Used — good</option><option>Used — fair</option><option>For parts</option></select></div>
+            </div>
+            <div class="two">
+              <div class="field"><label for="s-mfr">Manufacturer</label><input id="s-mfr" /></div>
+              <div class="field"><label for="s-model">Model</label><input id="s-model" /></div>
+            </div>
+            <div class="two">
+              <div class="field"><label for="s-year">Year</label><input id="s-year" type="number" min="1950" max="2030" /></div>
+              <div class="field"><label for="s-hours">Hours</label><input id="s-hours" type="number" min="0" /></div>
+            </div>
+            <div class="two">
+              <div class="field"><label for="s-origin">Origin country</label><input id="s-origin" placeholder="e.g. Germany" /></div>
+              <div class="field"><label for="s-loc">Current location</label><input id="s-loc" placeholder="Where is it now?" /></div>
+            </div>
+            <div class="two">
+              <div class="field"><label for="s-cert">Certification</label><input id="s-cert" placeholder="e.g. CE" /></div>
+              <div class="field"><label for="s-serial">Serial / VIN</label><input id="s-serial" /></div>
+            </div>
+            <div class="two">
+              <div class="field"><label for="s-price">Asking price</label><input id="s-price" type="number" min="0" /></div>
+              <div class="field"><label for="s-ccy">Currency</label><select id="s-ccy"><option>EUR</option><option>GBP</option><option>USD</option><option>AED</option><option>SAR</option></select></div>
+            </div>
+            <div class="field"><label for="s-specs">Specification / notes</label><textarea id="s-specs"></textarea></div>
+            <div class="field"><label for="s-photos">Photos (private)</label><input id="s-photos" type="file" accept="image/*" multiple /></div>
+            <div class="field"><label for="s-docs">Documents — service history, ownership (private)</label><input id="s-docs" type="file" accept=".pdf,image/*,.doc,.docx" multiple /></div>
+            <button class="btn btn-amber" id="s-submit" type="submit" style="width:100%">Submit for review</button>
+            <p class="muted mono" style="font-size:.7rem;text-align:center;margin-top:10px">Stored privately · reviewed by our desk · not publicly listed</p>
+          </form>
+        </div>
+
+        <!-- OWN SUBMISSIONS -->
+        <div>
+          <h3 style="margin-bottom:16px">Your submissions</h3>
+          <div id="subs"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div id="footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+const PHOTOS = APP_CONFIG.PHOTOS_BUCKET, DOCS = APP_CONFIG.DOCS_BUCKET;
+document.getElementById("nav").innerHTML = App.nav("sell");
+document.getElementById("footer").innerHTML = App.footer();
+App.paintNavAuth();
+document.getElementById("s-cat").innerHTML = window.CATEGORIES.map(c => `<option value="${c.slug}">${c.label}</option>`).join("");
+
+// ---- tabs ----
+const tabIn = document.getElementById("tab-in"), tabUp = document.getElementById("tab-up");
+tabIn.onclick = () => { tabIn.classList.add("active"); tabUp.classList.remove("active"); paneIn.classList.remove("hidden"); paneUp.classList.add("hidden"); };
+tabUp.onclick = () => { tabUp.classList.add("active"); tabIn.classList.remove("active"); paneUp.classList.remove("hidden"); paneIn.classList.add("hidden"); };
+const paneIn = document.getElementById("pane-in"), paneUp = document.getElementById("pane-up");
+
+// ---- auth actions ----
+document.getElementById("do-up").onclick = async () => {
+  const email = v("up-email"), pw = v("up-pw"), name = v("up-name");
+  if (!email || pw.length < 8) return App.toast("Enter an email and 8+ char password", true);
+  const { error } = await sb.auth.signUp({ email, password: pw, options: { data: { full_name: name, role: "seller" } } });
+  if (error) return App.toast(error.message, true);
+  App.toast("Account created. Check your email if confirmation is required, then sign in.");
+  tabIn.click();
+};
+document.getElementById("do-in").onclick = async () => {
+  const { error } = await sb.auth.signInWithPassword({ email: v("in-email"), password: v("in-pw") });
+  if (error) return App.toast(error.message, true);
+  render();
+};
+document.getElementById("signout").onclick = () => App.signOut();
+
+// ---- gate ----
+async function render() {
+  const s = await App.session();
+  document.getElementById("auth").classList.toggle("hidden", !!s);
+  document.getElementById("app").classList.toggle("hidden", !s);
+  if (!s) return;
+  const prof = await App.profile();
+  document.getElementById("who").textContent = "Signed in as " + (s.user.email);
+  loadSubs(s.user.id);
+}
+
+// ---- submit ----
+document.getElementById("sub-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("s-submit");
+  btn.disabled = true; btn.textContent = "Submitting…";
+  const s = await App.session();
+  const uid = s.user.id;
+
+  const record = {
+    seller_id: uid,
+    title: v("s-title"), category: v("s-cat"),
+    manufacturer: v("s-mfr") || null, model: v("s-model") || null,
+    year: numOrNull("s-year"), hours: numOrNull("s-hours"),
+    condition: v("s-cond"), origin_country: v("s-origin") || null,
+    location: v("s-loc") || null, certification: v("s-cert") || null,
+    serial_number: v("s-serial") || null, specs: v("s-specs") || null,
+    asking_price: numOrNull("s-price"), currency: v("s-ccy"),
+    status: "submitted",
+  };
+
+  const { data: inserted, error } = await sb.from("machinery_submissions").insert(record).select().single();
+  if (error) { btn.disabled = false; btn.textContent = "Submit for review"; return App.toast(error.message, true); }
+
+  // upload files to {uid}/{submissionId}/...
+  try {
+    const photoPaths = await uploadAll(document.getElementById("s-photos").files, PHOTOS, uid, inserted.id);
+    const docPaths   = await uploadAll(document.getElementById("s-docs").files,   DOCS,   uid, inserted.id);
+    if (photoPaths.length || docPaths.length) {
+      await sb.from("machinery_submissions").update({ photos: photoPaths, docs: docPaths }).eq("id", inserted.id);
+    }
+  } catch (err) {
+    App.toast("Submitted, but a file failed to upload: " + err.message, true);
+  }
+
+  document.getElementById("sub-form").reset();
+  document.getElementById("s-cat").innerHTML = window.CATEGORIES.map(c => `<option value="${c.slug}">${c.label}</option>`).join("");
+  btn.disabled = false; btn.textContent = "Submit for review";
+  App.toast("Submitted for review.");
+  loadSubs(uid);
+});
+
+async function uploadAll(files, bucket, uid, subId) {
+  const paths = [];
+  for (const f of files) {
+    const safe = f.name.replace(/[^\w.\-]/g, "_");
+    const path = `${uid}/${subId}/${Date.now()}_${safe}`;
+    const { error } = await sb.storage.from(bucket).upload(path, f, { upsert: false });
+    if (error) throw error;
+    paths.push(path);
+  }
+  return paths;
+}
+
+// ---- own submissions list ----
+async function loadSubs(uid) {
+  const { data, error } = await sb.from("machinery_submissions")
+    .select("*").eq("seller_id", uid).order("created_at", { ascending: false });
+  const el = document.getElementById("subs");
+  if (error) return el.innerHTML = `<p class="muted">Could not load your submissions.</p>`;
+  if (!data.length) return el.innerHTML = `<div class="card" style="color:var(--muted)">No submissions yet. Use the form to add your first unit.</div>`;
+
+  const badge = (st) => {
+    const map = { submitted:"neutral", under_review:"amber", approved:"ok", rejected:"warn", listed:"ok" };
+    return `<span class="badge ${map[st]||'neutral'}">${st.replace("_"," ")}</span>`;
+  };
+  el.innerHTML = data.map(d => `
+    <div class="card" style="margin-bottom:12px">
+      <div class="flex between"><strong>${App.esc(d.title)}</strong>${badge(d.status)}</div>
+      <p class="mono muted" style="font-size:.78rem;margin:6px 0">
+        ${App.esc(App.catLabel(d.category))} · ${App.esc(d.manufacturer||"")} ${App.esc(d.model||"")} · ${d.year||""}<br>
+        Submitted ${App.date(d.created_at)} · ${(d.photos||[]).length} photo(s), ${(d.docs||[]).length} doc(s)
+      </p>
+      ${d.admin_notes ? `<div class="note info" style="font-size:.8rem"><strong>Desk note:</strong> ${App.esc(d.admin_notes)}</div>` : ""}
+    </div>`).join("");
+}
+
+// react to auth changes (e.g. magic-link returns)
+sb.auth.onAuthStateChange(() => render());
+
+function v(id){ return document.getElementById(id).value.trim(); }
+function numOrNull(id){ const x = document.getElementById(id).value; return x ? Number(x) : null; }
+render();
+</script>
+</body>
+</html>
