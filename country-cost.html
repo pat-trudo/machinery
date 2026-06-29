@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Landed cost estimator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="nav"></div>
+
+<section class="section">
+  <div class="wrap">
+    <p class="eyebrow">Pre-purchase tool</p>
+    <h1 style="margin:10px 0 8px">Landed cost estimator</h1>
+    <p class="muted" style="max-width:62ch">
+      Pick a destination and a unit, and we'll estimate the all-in cost on the ground:
+      freight, import duty, import tax/VAT and the conformity you'll need. Indicative only.
+    </p>
+
+    <div style="display:grid;grid-template-columns:.95fr 1.05fr;gap:36px;margin-top:30px">
+      <!-- INPUTS -->
+      <div class="card">
+        <div class="two">
+          <div class="field"><label for="dest">Destination country</label><select id="dest" required></select></div>
+          <div class="field"><label for="origin">Shipping from</label><select id="origin"></select></div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="cat">Category</label><select id="cat"></select></div>
+          <div class="field"><label for="mode">Freight mode</label><select id="mode"></select></div>
+        </div>
+        <div class="field"><label for="value">Declared unit value (GBP)</label><input id="value" type="number" min="0" step="1000" placeholder="e.g. 135000" /></div>
+        <div class="two">
+          <div class="field"><label for="tonnes">Weight (tonnes)</label><input id="tonnes" type="number" min="0" step="0.5" placeholder="optional" /></div>
+          <div class="field"><label for="cbm">Volume (m³)</label><input id="cbm" type="number" min="0" step="1" placeholder="optional" /></div>
+        </div>
+        <button class="btn btn-amber" id="calc" style="width:100%">Estimate landed cost</button>
+        <p class="muted mono" style="font-size:.72rem;margin:12px 0 0">
+          Freight uses our placeholder route rates; duty &amp; VAT use the destination's current rules.
+        </p>
+      </div>
+
+      <!-- OUTPUT -->
+      <div id="out">
+        <div class="card" style="text-align:center;color:var(--muted);padding:48px 22px">
+          <p class="mono" style="letter-spacing:.1em">AWAITING INPUT</p>
+          <p style="margin-top:8px">Enter a destination and unit value to generate a breakdown.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="note warn" style="margin-top:26px">
+      <strong>Dual-use &amp; export controls.</strong> Cranes, engines, hydraulic and lifting
+      systems can fall under dual-use or military end-use controls regardless of destination.
+      Screen the end-user and obtain any required export licence before shipping.
+    </div>
+    <p class="muted" style="font-size:.82rem;margin-top:14px">
+      <strong>Indicative only.</strong> These figures are estimates, not a customs ruling, tax
+      advice or a binding quote. Duty classification, valuation and reliefs vary by case — confirm
+      with a licensed customs broker.
+    </p>
+  </div>
+</section>
+
+<div id="footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+document.getElementById("nav").innerHTML = App.nav("cost");
+document.getElementById("footer").innerHTML = App.footer();
+App.paintNavAuth();
+
+document.getElementById("cat").innerHTML = window.CATEGORIES.map(c => `<option value="${c.slug}">${c.label}</option>`).join("");
+document.getElementById("mode").innerHTML = window.MODES.map(m => `<option value="${m.slug}">${m.label}</option>`).join("");
+
+let RULES = [], RATES = [];
+
+async function boot() {
+  const [r1, r2] = await Promise.all([
+    sb.from("country_rules").select("*").order("country_name"),
+    sb.from("shipping_rates").select("*"),
+  ]);
+  RULES = r1.data || []; RATES = r2.data || [];
+
+  document.getElementById("dest").innerHTML =
+    `<option value="">Select…</option>` +
+    RULES.map(r => `<option value="${r.country_code}">${App.esc(r.country_name)}</option>`).join("");
+
+  const origins = [...new Set(RATES.map(r => r.origin_country))];
+  const def = (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_ORIGIN) || origins[0];
+  document.getElementById("origin").innerHTML =
+    (origins.length ? origins : [def]).map(o => `<option value="${o}" ${o===def?"selected":""}>${o}</option>`).join("");
+}
+
+document.getElementById("calc").addEventListener("click", () => {
+  const out = document.getElementById("out");
+  const destCode = document.getElementById("dest").value;
+  if (!destCode) { out.innerHTML = card("Pick a destination country first."); return; }
+  const rule = RULES.find(r => r.country_code === destCode);
+  const value = Number(document.getElementById("value").value) || 0;
+
+  // ---- sanctioned destination: refuse ----
+  if (rule.sanctioned) {
+    out.innerHTML = `
+      <div class="card" style="border-color:var(--danger)">
+        <span class="badge warn">Restricted destination</span>
+        <h2 style="margin:14px 0 8px">We can't quote ${App.esc(rule.country_name)}</h2>
+        <p>This destination is flagged under sanctions in our system. We do not generate
+        landed-cost estimates or facilitate transactions here.</p>
+        <div class="note warn" style="margin-top:14px">
+          ${App.esc(rule.restrictions_notes || "Subject to international sanctions.")}
+          Seek qualified legal counsel before any engagement.
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (!value) { out.innerHTML = card("Enter a declared unit value to estimate duty &amp; VAT."); return; }
+
+  const origin = document.getElementById("origin").value;
+  const mode = document.getElementById("mode").value;
+  const cat = document.getElementById("cat").value;
+  const tonnes = Number(document.getElementById("tonnes").value) || 0;
+  const cbm = Number(document.getElementById("cbm").value) || 0;
+
+  // ---- freight ----
+  const rate = RATES.find(r => r.origin_country === origin && r.destination_country === destCode && r.mode === mode);
+  let freight = 0, freightNote = "";
+  if (rate) {
+    freight = Number(rate.base_cost) + Number(rate.per_ton) * tonnes + Number(rate.per_cbm) * cbm;
+    freightNote = `${origin} → ${destCode} · ${mode}${rate.transit_days ? " · ~" + rate.transit_days + "d" : ""}`;
+  } else {
+    freightNote = "No rate configured for this route — freight excluded";
+  }
+
+  // ---- duty + VAT on a CIF basis ----
+  const insurance = value * 0.01;            // est. 1% marine insurance
+  const cif = value + freight + insurance;
+  const duties = rule.duty_rates || {};
+  const dutyRate = (cat in duties) ? Number(duties[cat]) : (("default" in duties) ? Number(duties.default) : 0);
+  const duty = cif * dutyRate;
+  const vatRate = Number(rule.import_vat_rate) || 0;
+  const vat = (cif + duty) * vatRate;
+  const total = cif + duty + vat;
+  const low = total * 0.90, high = total * 1.15;
+
+  out.innerHTML = `
+    <div class="card spec">
+      <div class="spec-head"><span>LANDED COST · ${App.esc(rule.country_name).toUpperCase()}</span><span>${App.esc(App.catLabel(cat))}</span></div>
+      <div class="spec-row"><span class="k">Declared value</span><span class="v">${App.money(value)}</span></div>
+      <div class="spec-row"><span class="k">Freight <small style="font-weight:400">(${App.esc(freightNote)})</small></span><span class="v">${rate ? App.money(freight) : "—"}</span></div>
+      <div class="spec-row"><span class="k">Insurance (≈1%)</span><span class="v">${App.money(insurance)}</span></div>
+      <div class="spec-row"><span class="k">CIF basis</span><span class="v">${App.money(cif)}</span></div>
+      <div class="spec-row"><span class="k">Import duty @ ${App.pct(dutyRate)}</span><span class="v">${App.money(duty)}</span></div>
+      <div class="spec-row"><span class="k">Import VAT/tax @ ${App.pct(vatRate)}
+        ${rule.vat_recoverable ? '<span class="badge ok" style="margin-left:6px">recoverable</span>' : '<span class="badge neutral" style="margin-left:6px">non-recoverable</span>'}
+        </span><span class="v">${App.money(vat)}</span></div>
+      <div class="spec-total"><span>INDICATIVE LANDED RANGE</span><span class="v">${App.money(low)} – ${App.money(high)}</span></div>
+
+      <div class="note" style="margin-top:18px">
+        <strong>Conformity required:</strong> ${App.esc(rule.conformity_required || "—")}.
+        ${rule.commodity_note ? "<br><strong>Classification:</strong> " + App.esc(rule.commodity_note) : ""}
+      </div>
+      ${rule.restrictions_notes ? `<div class="note info" style="margin-top:10px"><strong>Restrictions:</strong> ${App.esc(rule.restrictions_notes)}</div>` : ""}
+      ${rule.dual_use_note ? `<div class="note warn" style="margin-top:10px"><strong>Dual-use note:</strong> ${App.esc(rule.dual_use_note)}</div>` : ""}
+      ${rule.vat_recoverable ? `<p class="muted mono" style="font-size:.72rem;margin-top:12px">VAT shown is recoverable for VAT-registered importers — your net cost may be lower.</p>` : ""}
+    </div>`;
+});
+
+function card(msg){
+  return `<div class="card" style="text-align:center;color:var(--muted);padding:48px 22px"><p>${msg}</p></div>`;
+}
+boot();
+</script>
+</body>
+</html>
