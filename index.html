@@ -7,24 +7,43 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="styles.css" />
+<style>
+  .hero{position:relative;overflow:hidden;background:var(--graphite);isolation:isolate}
+  .hero-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;filter:saturate(1.05)}
+  .hero-overlay{position:absolute;inset:0;z-index:1;
+    background:
+      linear-gradient(90deg, rgba(13,15,18,.92) 0%, rgba(13,15,18,.72) 42%, rgba(13,15,18,.30) 100%),
+      linear-gradient(0deg, rgba(13,15,18,.85) 0%, rgba(13,15,18,0) 55%);}
+  .hero .wrap{position:relative;z-index:2;min-height:min(78vh,640px);align-content:center}
+  .hero .spec.card.dark{background:rgba(20,24,30,.55);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border-color:rgba(255,255,255,.14)}
+  @media(max-width:760px){
+    .hero .wrap{grid-template-columns:1fr!important;min-height:auto;padding-top:48px;padding-bottom:48px}
+    .hero .spec.card.dark{display:none}
+  }
+  @media (prefers-reduced-motion: reduce){ .hero-video{display:none} }
+</style>
 </head>
 <body>
 <div id="nav"></div>
 
 <!-- HERO -->
-<section style="background:var(--graphite);color:#fff">
+<section class="hero" style="color:#fff">
+  <video class="hero-video" autoplay muted loop playsinline preload="metadata" poster="hero-poster.jpg" aria-hidden="true">
+    <source src="hero.mp4" type="video/mp4" />
+  </video>
+  <div class="hero-overlay" aria-hidden="true"></div>
   <div class="wrap section" style="display:grid;grid-template-columns:1.3fr .9fr;gap:40px;align-items:center">
     <div>
       <p class="eyebrow">Sourcing desk · CE-marked heavy plant</p>
       <h1 style="color:#fff;margin:12px 0 16px">European-origin<br>machinery, exported<br>with the paperwork solved.</h1>
-      <p style="color:#c4cad1;max-width:48ch;font-size:1.05rem">
+      <p style="color:#dde1e6;max-width:48ch;font-size:1.05rem">
         Cranes, excavators, loaders and gensets from documented European service
         histories. Tell us the spec you need — we match it, and we tell you the
         landed cost before you commit.
       </p>
       <div class="flex" style="margin-top:24px">
         <a href="#requirement" class="btn btn-amber">State a requirement</a>
-        <a href="country-cost.html" class="btn btn-ghost" style="color:#fff">Estimate landed cost</a>
+        <a href="country-cost.html" class="btn btn-ghost" style="color:#fff;border-color:rgba(255,255,255,.4)">Estimate landed cost</a>
       </div>
     </div>
     <div class="spec card dark" aria-hidden="true">
