@@ -42,6 +42,7 @@
         <button class="tab active" data-pane="dash">Dashboard</button>
         <button class="tab" data-pane="leads">Leads</button>
         <button class="tab" data-pane="subs">Submissions</button>
+        <button class="tab" data-pane="stock">Stock</button>
         <button class="tab" data-pane="rates">Shipping rates</button>
         <button class="tab" data-pane="rules">Country rules</button>
       </div>
@@ -62,6 +63,54 @@
         <h3 style="margin-bottom:12px">All submissions <span class="badge neutral" id="c-subs"></span></h3>
         <div class="table-wrap"><table id="t-subs"></table></div>
         <div id="promote" class="hidden card" style="margin-top:20px"></div>
+      </div>
+
+      <div class="pane hidden" id="pane-stock">
+        <h3 style="margin-bottom:6px">Add a crane</h3>
+        <p class="muted" style="font-size:.85rem;margin-bottom:14px">Fill the details, add the spec rows that appear on the listing, and upload a photo + the manufacturer PDF. Publishing makes it live on the home page.</p>
+        <div class="card">
+          <div class="two">
+            <div class="field"><label>Title</label><input id="n-title" placeholder="Grove GRT8100 — 100 t rough-terrain crane"></div>
+            <div class="field"><label>Category</label><select id="n-cat"></select></div>
+          </div>
+          <div class="two">
+            <div class="field"><label>Manufacturer</label><input id="n-mfr" value="Grove"></div>
+            <div class="field"><label>Model</label><input id="n-model" placeholder="GRT8100"></div>
+          </div>
+          <div class="two">
+            <div class="field"><label>Year of manufacture</label><input id="n-year" type="number" placeholder="2024"></div>
+            <div class="field"><label>Operating hours</label><input id="n-hours" placeholder="0 h — new / unused"></div>
+          </div>
+          <div class="two">
+            <div class="field"><label>Condition</label><input id="n-cond" placeholder="New / unused"></div>
+            <div class="field"><label>Certification</label><input id="n-cert" value="CE"></div>
+          </div>
+          <div class="two">
+            <div class="field"><label>Country of build (origin)</label><input id="n-origin" placeholder="Italy"></div>
+            <div class="field"><label>Current location</label><input id="n-loc" value="Saudi Arabia"></div>
+          </div>
+          <div class="two">
+            <div class="field"><label>Units in stock</label><input id="n-qty" type="number" min="1" value="1"></div>
+            <div class="field"><label>Transport size class</label><select id="n-size"></select></div>
+          </div>
+          <div class="field"><label>Price indication</label><input id="n-price" value="POA"></div>
+          <div class="field"><label>Short teaser (home card)</label><input id="n-teaser" placeholder="One-line summary buyers see on the card"></div>
+          <div class="field"><label>Spec summary (product page)</label><textarea id="n-summary" rows="3" placeholder="A paragraph describing the unit."></textarea></div>
+
+          <label style="font-weight:600;display:block;margin:8px 0 6px">Specification rows <span class="muted" style="font-weight:400">— these become the spec table on the listing</span></label>
+          <div id="n-specs"></div>
+          <button class="btn btn-ghost btn-sm" id="n-add-spec" type="button">+ Add spec row</button>
+
+          <div class="two" style="margin-top:14px">
+            <div class="field"><label>Photo (jpg/png)</label><input id="n-image" type="file" accept="image/*"></div>
+            <div class="field"><label>Manufacturer brochure (PDF)</label><input id="n-pdf" type="file" accept="application/pdf"></div>
+          </div>
+          <button class="btn btn-amber" id="n-publish" style="width:100%;margin-top:6px">Publish crane</button>
+          <p class="muted mono" id="n-status" style="font-size:.72rem;margin-top:10px"></p>
+        </div>
+
+        <h3 style="margin:24px 0 12px">Current stock <span class="badge neutral" id="c-stock"></span></h3>
+        <div class="table-wrap"><table id="t-stock"></table></div>
       </div>
 
       <!-- SHIPPING RATES -->
@@ -134,6 +183,7 @@ async function loadAll() {
   paintStats({ leads: leads.data||[], subs: subs.data||[], listings: listings.data||[], matches: matches.data||[] });
   paintLeads(leads.data||[]);
   paintSubs(subs.data||[]);
+  loadStock();
   loadRates();
   loadRules();
 }
@@ -338,6 +388,131 @@ function collect(tr, numFields){
 }
 
 function v(id){ return document.getElementById(id).value.trim(); }
+
+// ===================== STOCK MANAGER =====================
+const DEFAULT_SPECS = ["Type","Max capacity","Main boom","Max tip height","Engine"];
+let stockReady = false;
+
+function specRow(k, val){
+  const wrap = document.createElement("div");
+  wrap.className = "two"; wrap.style.marginBottom = "6px";
+  wrap.innerHTML =
+    `<div class="field" style="margin:0"><input class="sp-k" placeholder="Label" value="${App.esc(k||"")}"></div>
+     <div class="field" style="margin:0;display:flex;gap:6px"><input class="sp-v" placeholder="Value" value="${App.esc(val||"")}" style="flex:1">
+       <button type="button" class="btn btn-ghost btn-sm sp-x" title="Remove">✕</button></div>`;
+  wrap.querySelector(".sp-x").onclick = () => wrap.remove();
+  return wrap;
+}
+
+function initStockForm(){
+  if (stockReady) return; stockReady = true;
+  App.fillCategorySelect(document.getElementById("n-cat"));
+  App.fillSizeSelect(document.getElementById("n-size"));
+  const specs = document.getElementById("n-specs");
+  DEFAULT_SPECS.forEach(k => specs.appendChild(specRow(k, "")));
+  document.getElementById("n-add-spec").onclick = () => specs.appendChild(specRow("", ""));
+  document.getElementById("n-publish").onclick = publishCrane;
+}
+
+async function uploadPublic(file, prefix){
+  const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+  const path = `${prefix}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+  const { error } = await sb.storage.from("listing-media").upload(path, file, { upsert: true, contentType: file.type });
+  if (error) throw error;
+  return sb.storage.from("listing-media").getPublicUrl(path).data.publicUrl;
+}
+
+async function publishCrane(){
+  const btn = document.getElementById("n-publish");
+  const status = document.getElementById("n-status");
+  const title = v("n-title"), model = v("n-model");
+  if (!title || !v("n-cat")) { App.toast("Title and category are required", true); return; }
+
+  // build key_specs from the rows + structured fields
+  const rows = [...document.querySelectorAll("#n-specs .two")].map(r => ({
+    k: r.querySelector(".sp-k").value.trim(), v: r.querySelector(".sp-v").value.trim()
+  })).filter(s => s.k && s.v);
+  const add = (k, val) => { if (val) rows.push({ k, v: val }); };
+  add("Year of manufacture", v("n-year"));
+  add("Operating hours", v("n-hours"));
+  add("Condition", v("n-cond"));
+  add("Country of build", v("n-origin"));
+  add("Conformity", v("n-cert"));
+  add("Located", v("n-loc"));
+
+  btn.disabled = true; status.textContent = "Uploading…";
+  try {
+    let image_url = null, brochure_url = null;
+    const img = document.getElementById("n-image").files[0];
+    const pdf = document.getElementById("n-pdf").files[0];
+    if (img) { status.textContent = "Uploading photo…"; image_url = await uploadPublic(img, "images"); }
+    if (pdf) { status.textContent = "Uploading brochure…"; brochure_url = await uploadPublic(pdf, "brochures"); }
+
+    status.textContent = "Saving listing…";
+    const rec = {
+      title, category: v("n-cat"),
+      manufacturer: v("n-mfr") || null, model: model || null,
+      year: v("n-year") ? Number(v("n-year")) : null,
+      condition: v("n-cond") || null,
+      origin_country: v("n-origin") || null,
+      current_location: v("n-loc") || null,
+      certification: v("n-cert") || null,
+      price_indication: v("n-price") || "POA",
+      stock_qty: v("n-qty") ? Number(v("n-qty")) : 1,
+      transport_class: v("n-size") || "heavy",
+      teaser: v("n-teaser") || null,
+      spec_summary: v("n-summary") || null,
+      key_specs: rows,
+      image_url, brochure_url,
+      status: "active",
+    };
+    const { error } = await sb.from("listings").insert(rec);
+    if (error) throw error;
+    App.toast("Crane published and live on the home page.");
+    status.textContent = "Published ✓";
+    // reset the simple fields
+    ["n-title","n-model","n-year","n-hours","n-teaser","n-summary","n-image","n-pdf"].forEach(id => document.getElementById(id).value = "");
+    loadAll();
+  } catch (err) {
+    status.textContent = "";
+    App.toast("Could not publish: " + (err.message || err), true);
+  } finally { btn.disabled = false; }
+}
+
+async function loadStock(){
+  initStockForm();
+  const { data } = await sb.from("listings").select("*").order("created_at", { ascending: false });
+  const rows = data || [];
+  document.getElementById("c-stock").textContent = rows.length;
+  const t = document.getElementById("t-stock");
+  t.innerHTML = `<thead><tr><th>Photo</th><th>Title</th><th>Model</th><th>Qty</th><th>Status</th><th>PDF</th><th></th></tr></thead><tbody>` +
+    rows.map(l => `<tr data-id="${l.id}">
+      <td>${l.image_url ? `<img src="${App.esc(l.image_url)}" alt="" style="width:54px;height:38px;object-fit:cover;border-radius:5px">` : '<span class="muted">—</span>'}</td>
+      <td>${App.esc(l.title)}</td>
+      <td>${App.esc(l.model||"")}</td>
+      <td>${l.stock_qty==null?"":l.stock_qty}</td>
+      <td><span class="badge ${l.status==="active"?"ok":"neutral"}">${App.esc(l.status||"")}</span></td>
+      <td>${l.brochure_url?'<span class="badge ok">PDF</span>':'<span class="muted">—</span>'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" data-toggle="${l.id}">${l.status==="active"?"Pause":"Activate"}</button>
+        <button class="btn btn-ghost btn-sm" data-del="${l.id}" style="color:var(--danger)">Delete</button>
+      </td></tr>`).join("") + `</tbody>`;
+
+  t.querySelectorAll("[data-toggle]").forEach(b => b.onclick = async () => {
+    const row = rows.find(r => r.id === b.dataset.toggle);
+    const next = row.status === "active" ? "paused" : "active";
+    const { error } = await sb.from("listings").update({ status: next }).eq("id", row.id);
+    if (error) return App.toast(error.message, true);
+    loadStock();
+  });
+  t.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    if (!confirm("Delete this listing permanently?")) return;
+    const { error } = await sb.from("listings").delete().eq("id", b.dataset.del);
+    if (error) return App.toast(error.message, true);
+    App.toast("Listing deleted."); loadStock();
+  });
+}
+
 sb.auth.onAuthStateChange(() => gate());
 gate();
 </script>

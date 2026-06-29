@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stock unit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .pgrid{display:grid;grid-template-columns:1.05fr .95fr;gap:36px;margin-top:26px}
+  @media (max-width:880px){.pgrid{grid-template-columns:1fr}}
+  .brochure iframe{width:100%;height:560px;border:1px solid var(--line,#2a2f37);border-radius:10px;background:#fff}
+  .qty{display:flex;align-items:center;gap:10px}
+  .qty button{width:38px;height:38px;font-size:1.1rem;line-height:1;border-radius:8px;cursor:pointer}
+  .qty input{width:64px;text-align:center}
+</style>
+</head>
+<body>
+<div id="nav"></div>
+
+<section class="section"><div class="wrap">
+  <a href="index.html" class="muted" style="font-size:.85rem">← Back to stock</a>
+  <div id="prod">
+    <div class="card" style="text-align:center;color:var(--muted);padding:48px 22px;margin-top:14px">
+      <p class="mono" style="letter-spacing:.1em">LOADING UNIT…</p>
+    </div>
+  </div>
+</div></section>
+
+<div id="footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+document.getElementById("nav").innerHTML = App.nav("buy");
+document.getElementById("footer").innerHTML = App.footer();
+App.paintNavAuth();
+
+const id = new URLSearchParams(location.search).get("id");
+const wrap = document.getElementById("prod");
+
+function isPdf(u){ return u && /\.pdf(\?|#|$)/i.test(u); }
+
+async function boot(){
+  if (!id){ wrap.innerHTML = card("No unit specified. Return to the stock list."); return; }
+  const { data: l, error } = await sb.from("listings").select("*").eq("id", id).single();
+  if (error || !l){ wrap.innerHTML = card("That unit could not be found — it may have been sold or paused."); return; }
+
+  const specs = Array.isArray(l.key_specs) ? l.key_specs : [];
+  const qtyMax = l.stock_qty == null ? 1 : Math.max(1, Number(l.stock_qty));
+
+  const specRows = specs.map(s =>
+    `<div class="spec-row"><span class="k">${App.esc(s.k)}</span><span class="v">${App.esc(s.v)}</span></div>`).join("");
+
+  // brochure panel
+  let brochure = "";
+  if (isPdf(l.brochure_url)) {
+    brochure = `<div class="brochure">
+        <iframe src="${App.esc(l.brochure_url)}" title="Manufacturer brochure" loading="lazy"></iframe>
+        <p style="margin-top:10px"><a class="btn btn-dark btn-sm" href="${App.esc(l.brochure_url)}" download>Download brochure (PDF) ↓</a>
+        <a class="btn btn-ghost btn-sm" href="${App.esc(l.brochure_url)}" target="_blank" rel="noopener" style="margin-left:8px">Open in new tab ↗</a></p>
+        <p class="muted mono" style="font-size:.7rem;margin-top:6px">Brochure hosted by the manufacturer. If it does not display here, use the button above.</p>
+      </div>`;
+  } else if (l.source_url) {
+    brochure = `<div class="card">
+        <p class="eyebrow">Manufacturer documentation</p>
+        <p style="margin:8px 0 14px" class="muted">Full specifications and the official product guide are published by the manufacturer.</p>
+        <a class="btn btn-dark" href="${App.esc(l.source_url)}" target="_blank" rel="noopener">View manufacturer specifications ↗</a>
+      </div>`;
+  } else {
+    brochure = `<div class="card"><p class="muted">No manufacturer brochure linked yet.</p></div>`;
+  }
+
+  wrap.innerHTML = `
+    ${l.image_url ? `<div style="margin:14px 0 0;border-radius:12px;overflow:hidden;border:1px solid var(--line,#2a2f37)"><img src="${App.esc(l.image_url)}" alt="${App.esc(l.title)}" style="width:100%;max-height:440px;object-fit:cover;display:block"></div>` : ""}
+    <div class="pgrid">
+      <div>${brochure}</div>
+      <div>
+        <p class="eyebrow">${App.esc(App.catLabel(l.category))}${l.stock_qty ? " · " + qtyMax + " available" : ""}</p>
+        <h1 style="margin:8px 0 6px">${App.esc(l.title)}</h1>
+        <div class="flex" style="gap:8px;margin-bottom:12px">
+          ${l.certification ? `<span class="cert">${App.esc(l.certification)}</span>` : ""}
+          ${l.current_location ? `<span class="badge neutral">Located: ${App.esc(l.current_location)}</span>` : ""}
+          ${l.origin_country ? `<span class="badge neutral">Origin: ${App.esc(l.origin_country)}</span>` : ""}
+          ${l.condition ? `<span class="badge neutral">${App.esc(l.condition)}</span>` : ""}
+        </div>
+        ${l.spec_summary ? `<p style="max-width:60ch">${App.esc(l.spec_summary)}</p>` : ""}
+        ${specRows ? `<div class="spec" style="margin:16px 0">${specRows}</div>` : ""}
+
+        <div class="card" style="margin-top:8px">
+          <label style="font-weight:600;display:block;margin-bottom:8px">Units required</label>
+          <div class="qty">
+            <button type="button" id="minus" aria-label="Decrease">–</button>
+            <input id="qty" type="number" min="1" max="${qtyMax}" value="1" />
+            <button type="button" id="plus" aria-label="Increase">+</button>
+            <span class="muted" style="margin-left:6px">of ${qtyMax} available</span>
+          </div>
+          <button class="btn btn-amber" id="add" style="width:100%;margin-top:14px">Add to basket</button>
+          <a class="btn btn-ghost btn-sm" href="basket.html" style="width:100%;margin-top:8px;text-align:center">Go to basket &amp; price destination →</a>
+          <p class="muted mono" style="font-size:.7rem;margin-top:10px">Price on application. You enter your own declared unit value in the basket for the landed-cost estimate.</p>
+        </div>
+      </div>
+    </div>`;
+
+  const qEl = document.getElementById("qty");
+  const clamp = () => { let v = Math.round(Number(qEl.value)||1); v = Math.max(1, Math.min(v, qtyMax)); qEl.value = v; return v; };
+  document.getElementById("minus").onclick = () => { qEl.value = Math.max(1, (Number(qEl.value)||1) - 1); };
+  document.getElementById("plus").onclick  = () => { qEl.value = Math.min(qtyMax, (Number(qEl.value)||1) + 1); };
+  qEl.addEventListener("change", clamp);
+
+  document.getElementById("add").onclick = () => {
+    const qty = clamp();
+    Basket.add({ id: l.id, model: l.model, title: l.title, category: l.category,
+                 transport_class: l.transport_class, qty, max: qtyMax });
+    App.toast(`Added ${qty} × ${l.model || l.title} to basket`);
+  };
+}
+
+function card(msg){ return `<div class="card" style="text-align:center;color:var(--muted);padding:48px 22px;margin-top:14px"><p>${msg}</p><p style="margin-top:12px"><a class="btn btn-dark btn-sm" href="index.html">Back to stock</a></p></div>`; }
+
+boot();
+</script>
+</body>
+</html>
