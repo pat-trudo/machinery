@@ -194,6 +194,7 @@ function render() {
   el.innerHTML = rows.map(l => {
     const specs = Array.isArray(l.key_specs) ? l.key_specs : [];
     const cap = (specs.find(s => /capacity/i.test(s.k)) || {}).v;
+    const hrs = (specs.find(s => /hours/i.test(s.k)) || {}).v;
     const href = `product.html?id=${encodeURIComponent(l.id)}`;
     const qty = l.stock_qty == null ? null : Number(l.stock_qty);
     return `
@@ -204,7 +205,7 @@ function render() {
         <div class="meta">
           ${l.manufacturer ? App.esc(l.manufacturer) + " " : ""}${l.model ? App.esc(l.model) : ""}<br>
           ${cap ? "Capacity: " + App.esc(cap) + "<br>" : ""}
-          ${l.origin_country ? "Origin: " + App.esc(l.origin_country) + " · " : ""}${l.year || ""}
+          ${l.origin_country ? "Origin: " + App.esc(l.origin_country) + " · " : ""}${l.year || ""}${hrs ? "<br>Hours: " + App.esc(hrs) : ""}${l.current_location ? "<br>Located: " + App.esc(l.current_location) : ""}
         </div>
         <div class="flex" style="gap:6px">${l.certification ? `<span class="cert">${App.esc(l.certification)}</span>` : ""}</div>
         <div class="price">${App.esc(l.price_indication || "POA")}</div>
