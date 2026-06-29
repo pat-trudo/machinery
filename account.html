@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Your account</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div id="nav"></div>
+
+<section class="section">
+  <div class="wrap">
+    <p class="eyebrow">Account</p>
+    <h1 style="margin:10px 0 8px">Your desk</h1>
+
+    <!-- signed out -->
+    <div id="gate" class="card hidden" style="max-width:460px;margin-top:20px">
+      <p>You need to sign in to view your account.</p>
+      <a href="sell.html" class="btn btn-dark" style="margin-top:12px">Go to sign in</a>
+    </div>
+
+    <!-- signed in -->
+    <div id="app" class="hidden" style="margin-top:24px">
+      <div style="display:grid;grid-template-columns:.8fr 1.2fr;gap:36px;align-items:start">
+        <!-- PROFILE -->
+        <div class="card">
+          <div class="flex between"><h3>Profile</h3><button class="btn btn-ghost btn-sm" id="signout">Sign out</button></div>
+          <div class="field" style="margin-top:14px"><label>Email</label><input id="p-email" disabled /></div>
+          <div class="field"><label for="p-name">Full name</label><input id="p-name" /></div>
+          <div class="field"><label for="p-company">Company</label><input id="p-company" /></div>
+          <div class="two">
+            <div class="field"><label for="p-country">Country</label><input id="p-country" /></div>
+            <div class="field"><label for="p-phone">Phone</label><input id="p-phone" /></div>
+          </div>
+          <div class="field"><label>Account type</label><input id="p-role" disabled /></div>
+          <button class="btn btn-amber" id="p-save" style="width:100%">Save profile</button>
+        </div>
+
+        <!-- ACTIVITY -->
+        <div>
+          <div class="tabs">
+            <button class="tab active" id="t-leads">My requirements</button>
+            <button class="tab" id="t-subs">My submissions</button>
+          </div>
+          <div id="leads"></div>
+          <div id="subs" class="hidden"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div id="footer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+document.getElementById("nav").innerHTML = App.nav("account");
+document.getElementById("footer").innerHTML = App.footer();
+App.paintNavAuth();
+
+document.getElementById("signout").onclick = () => App.signOut();
+
+const tLeads = document.getElementById("t-leads"), tSubs = document.getElementById("t-subs");
+tLeads.onclick = () => swap(true);
+tSubs.onclick  = () => swap(false);
+function swap(showLeads){
+  tLeads.classList.toggle("active", showLeads); tSubs.classList.toggle("active", !showLeads);
+  document.getElementById("leads").classList.toggle("hidden", !showLeads);
+  document.getElementById("subs").classList.toggle("hidden", showLeads);
+}
+
+async function boot() {
+  const s = await App.session();
+  document.getElementById("gate").classList.toggle("hidden", !!s);
+  document.getElementById("app").classList.toggle("hidden", !s);
+  if (!s) return;
+
+  const prof = await App.profile();
+  document.getElementById("p-email").value   = s.user.email || "";
+  document.getElementById("p-name").value    = (prof && prof.full_name) || "";
+  document.getElementById("p-company").value = (prof && prof.company) || "";
+  document.getElementById("p-country").value = (prof && prof.country) || "";
+  document.getElementById("p-phone").value   = (prof && prof.phone) || "";
+  document.getElementById("p-role").value    = (prof && prof.role) || "buyer";
+
+  loadLeads(s.user.email, s.user.id);
+  loadSubs(s.user.id);
+}
+
+document.getElementById("p-save").onclick = async () => {
+  const s = await App.session();
+  const { error } = await sb.from("profiles").update({
+    full_name: v("p-name"), company: v("p-company"),
+    country: v("p-country"), phone: v("p-phone"),
+  }).eq("id", s.user.id);
+  App.toast(error ? error.message : "Profile saved", !!error);
+};
+
+async function loadLeads(email, uid) {
+  // RLS lets you read leads where email matches your auth email OR user_id is you
+  const { data } = await sb.from("leads").select("*")
+    .or(`email.eq.${email},user_id.eq.${uid}`).order("created_at", { ascending: false });
+  const el = document.getElementById("leads");
+  if (!data || !data.length) { el.innerHTML = empty("No requirements yet.", "index.html", "State a requirement"); return; }
+  el.innerHTML = data.map(l => `
+    <div class="card" style="margin-bottom:12px">
+      <div class="flex between"><strong>${App.esc(App.catLabel(l.category))}</strong>
+        <span class="mono muted" style="font-size:.76rem">${App.date(l.created_at)}</span></div>
+      <p class="mono muted" style="font-size:.8rem;margin:6px 0">
+        Destination: ${App.esc(l.destination_country||"—")} ·
+        Budget: ${l.max_budget ? App.money(l.max_budget, l.budget_currency||"GBP") : "—"} ·
+        Timeline: ${App.esc(l.timeline||"—")}
+      </p>
+      ${l.specs ? `<p style="font-size:.88rem">${App.esc(l.specs)}</p>` : ""}
+    </div>`).join("");
+}
+
+async function loadSubs(uid) {
+  const { data } = await sb.from("machinery_submissions").select("*")
+    .eq("seller_id", uid).order("created_at", { ascending: false });
+  const el = document.getElementById("subs");
+  if (!data || !data.length) { el.innerHTML = empty("No submissions yet.", "sell.html", "Submit a unit"); return; }
+  const badge = (st) => { const m={submitted:"neutral",under_review:"amber",approved:"ok",rejected:"warn",listed:"ok"};
+    return `<span class="badge ${m[st]||'neutral'}">${st.replace("_"," ")}</span>`; };
+  el.innerHTML = data.map(d => `
+    <div class="card" style="margin-bottom:12px">
+      <div class="flex between"><strong>${App.esc(d.title)}</strong>${badge(d.status)}</div>
+      <p class="mono muted" style="font-size:.78rem;margin:6px 0">
+        ${App.esc(App.catLabel(d.category))} · ${App.esc(d.manufacturer||"")} ${App.esc(d.model||"")} · ${d.year||""} · ${App.date(d.created_at)}
+      </p>
+      ${d.admin_notes ? `<div class="note info" style="font-size:.8rem"><strong>Desk note:</strong> ${App.esc(d.admin_notes)}</div>` : ""}
+    </div>`).join("");
+}
+
+function empty(msg, href, label){
+  return `<div class="card" style="color:var(--muted)">${msg} <a href="${href}" style="color:var(--amber-deep);font-weight:600">${label} →</a></div>`;
+}
+function v(id){ return document.getElementById(id).value.trim(); }
+sb.auth.onAuthStateChange(() => boot());
+boot();
+</script>
+</body>
+</html>
