@@ -11,9 +11,9 @@
   .lines{width:100%;border-collapse:collapse;margin-top:8px}
   .lines th,.lines td{padding:10px 8px;border-bottom:1px solid var(--line,#2a2f37);text-align:left;vertical-align:middle}
   .lines th{font:600 .72rem/1 "JetBrains Mono",monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-  .lines input[type=number]{width:100%;min-width:90px}
   .lineqty{display:flex;align-items:center;gap:6px}
   .lineqty button{width:30px;height:30px;border-radius:7px;cursor:pointer;line-height:1}
+  .lineqty input{width:58px;text-align:center}
   .x{cursor:pointer;color:var(--muted);font-size:1.1rem;background:none;border:none}
   @media (max-width:760px){.lines thead{display:none}.lines td{display:block;border:none;padding:4px 0}.lines tr{display:block;border-bottom:1px solid var(--line,#2a2f37);padding:12px 0}}
 </style>
@@ -24,8 +24,9 @@
 <section class="section"><div class="wrap">
   <p class="eyebrow">Your selection</p>
   <h1 style="margin:8px 0 6px">Basket &amp; landed cost</h1>
-  <p class="muted" style="max-width:64ch">Set the quantity and your declared unit value for each unit, pick a destination, and we'll
-    estimate freight, import duty and VAT across the whole basket. Indicative only.</p>
+  <p class="muted" style="max-width:64ch">Set the quantity, pick a destination, and we'll estimate the all-in landed cost across the
+    basket — unit prices (with any multi-unit discount), freight, import duty and VAT. Prices are quoted in SAR and shown in your
+    selected currency at live rates. Indicative only.</p>
 
   <div id="basket"></div>
 </div></section>
@@ -41,15 +42,35 @@ document.getElementById("footer").innerHTML = App.footer();
 App.paintNavAuth();
 
 const root = document.getElementById("basket");
-let RULES = [], RATES = [], VALUES = {};
+let RULES = [], RATES = [], LISTINGS = {};
 
 async function boot(){
-  const [r1, r2] = await Promise.all([
+  await App.loadFx(); await App.resolveCcy();
+  const items = Basket.get();
+  const ids = items.map(i => i.id);
+  const [r1, r2, r3] = await Promise.all([
     sb.from("country_rules").select("*").order("country_name"),
     sb.from("shipping_rates").select("*"),
+    ids.length ? sb.from("listings").select("*").in("id", ids) : Promise.resolve({ data: [] }),
   ]);
   RULES = r1.data || []; RATES = r2.data || [];
+  LISTINGS = {}; (r3.data || []).forEach(l => LISTINGS[l.id] = l);
   renderShell();
+}
+
+// unit price (SAR), discount for the chosen qty, discounted unit + line value
+function pricing(it){
+  const l = LISTINGS[it.id] || {};
+  const qty = it.qty || 1;
+  const unitSar = l.price_sar != null ? Number(l.price_sar) : null;
+  const disc = App.discountRate(l.discount_tiers, qty);
+  const discUnitSar = unitSar != null ? unitSar * (1 - disc) : null;
+  return { l, qty, unitSar, disc, discUnitSar, lineSar: discUnitSar != null ? discUnitSar * qty : null,
+           category: it.category, transport_class: it.transport_class };
+}
+
+function rateFor(originCountry, destCode, mode){
+  return RATES.find(r => r.origin_country===originCountry && r.destination_country===destCode && r.mode===mode) || null;
 }
 
 function renderShell(){
@@ -62,27 +83,32 @@ function renderShell(){
     return;
   }
 
-  const rows = items.map(it => `
+  const rows = items.map(it => {
+    const p = pricing(it);
+    const unit = p.unitSar != null ? App.fmtSar(p.discUnitSar) : "POA";
+    const discTag = p.disc ? ` <span class="badge ok" style="margin-left:4px">−${App.pct(p.disc)}</span>` : "";
+    const line = p.lineSar != null ? App.fmtSar(p.lineSar) : "POA";
+    return `
     <tr data-id="${App.esc(it.id)}">
       <td><strong>${App.esc(it.model || it.title)}</strong><br><span class="muted" style="font-size:.8rem">${App.esc(App.catLabel(it.category))}</span></td>
-      <td>
-        <div class="lineqty">
+      <td><div class="lineqty">
           <button type="button" class="q-minus">–</button>
-          <input type="number" class="q-input" min="1" max="${it.max||99}" value="${it.qty}" style="width:58px;text-align:center">
+          <input type="number" class="q-input" min="1" max="${it.max||99}" value="${it.qty}">
           <button type="button" class="q-plus">+</button>
-        </div>
-      </td>
-      <td><input type="number" class="v-input" min="0" step="1000" placeholder="e.g. 420000" value="${VALUES[it.id] != null ? VALUES[it.id] : ""}"></td>
+        </div></td>
+      <td>${unit}${discTag}</td>
+      <td><strong>${line}</strong></td>
       <td style="text-align:right"><button class="x" title="Remove" aria-label="Remove">✕</button></td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
 
   root.innerHTML = `
     <div class="card" style="margin-top:18px">
       <table class="lines">
-        <thead><tr><th>Unit</th><th>Qty</th><th>Declared unit value (GBP)</th><th></th></tr></thead>
+        <thead><tr><th>Unit</th><th>Qty</th><th>Unit price</th><th>Line total</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <p class="muted mono" style="font-size:.7rem;margin-top:10px">Declared value is the price you'd invoice per unit — used only to estimate duty &amp; VAT. We don't store or publish it.</p>
+      <p class="muted mono" style="font-size:.7rem;margin-top:10px">Quoted in SAR; shown in ${App.esc(App.ccy())} at live rates. Multi-unit discounts apply automatically by quantity. The discounted price is the declared value used for duty &amp; VAT.</p>
     </div>
 
     <div class="card" style="margin-top:18px">
@@ -102,22 +128,22 @@ function renderShell(){
       required export licence before shipping.
     </div>`;
 
-  // selectors
   App.fillCountrySelect(document.getElementById("dest"), { includeBlank: true });
   App.fillOriginSelect(document.getElementById("origin"));
   App.fillModeSelect(document.getElementById("mode"));
+  // default origin to Saudi Arabia (where the stock is)
+  const oSel = document.getElementById("origin");
+  const sa = [...oSel.options].find(o => o.getAttribute("data-country") === "SA");
+  if (sa) oSel.value = sa.value;
   App.detectCountryCode().then(code => { if (code) { const d = document.getElementById("dest"); if ([...d.options].some(o=>o.value===code)) d.value = code; } });
 
-  // line interactions
   root.querySelectorAll("tr[data-id]").forEach(tr => {
     const id = tr.getAttribute("data-id");
     const qInput = tr.querySelector(".q-input");
-    const vInput = tr.querySelector(".v-input");
     tr.querySelector(".q-minus").onclick = () => { Basket.setQty(id, (Number(qInput.value)||1) - 1); renderShell(); };
     tr.querySelector(".q-plus").onclick  = () => { Basket.setQty(id, (Number(qInput.value)||1) + 1); renderShell(); };
     qInput.addEventListener("change", () => { Basket.setQty(id, Number(qInput.value)||1); renderShell(); });
-    vInput.addEventListener("input", () => { VALUES[id] = vInput.value === "" ? null : Number(vInput.value); });
-    tr.querySelector(".x").onclick = () => { Basket.remove(id); delete VALUES[id]; renderShell(); };
+    tr.querySelector(".x").onclick = () => { Basket.remove(id); renderShell(); };
   });
 
   document.getElementById("calc").addEventListener("click", calc);
@@ -143,32 +169,47 @@ function calc(){
     return;
   }
 
-  const ccy = (rule && rule.currency) || "GBP";
-  let sumValue=0, sumFreight=0, sumIns=0, sumCif=0, sumDuty=0, sumVat=0, sumTotal=0, units=0, missingVal=false, anyFreight=false;
-  const lineRows = items.map(it => {
-    const sz = App.sizeClass(it.transport_class) || App.sizeClass("heavy");
-    const rate = RATES.find(r => r.origin_country===originCountry && r.destination_country===destCode && r.mode===mode) || null;
-    if (rate) anyFreight = true;
-    const value = VALUES[it.id]; if (value == null || value === "" ) missingVal = true;
-    const c = App.landed(Number(value)||0, rule, rate, sz, it.category);
-    const q = it.qty || 1; units += q;
-    sumValue += (Number(value)||0)*q; sumFreight += c.freight*q; sumIns += c.insurance*q;
-    sumCif += c.cif*q; sumDuty += c.duty*q; sumVat += c.vat*q; sumTotal += c.total*q;
-    return `<div class="spec-row"><span class="k">${q} × ${App.esc(it.model||it.title)}
-        <small style="font-weight:400;color:var(--muted)">· ${App.pct(c.dutyRate)} duty</small></span>
-        <span class="v">${value==null||value===""?'<span class="muted">value needed</span>':App.money(c.total*q, ccy)}</span></div>`;
-  }).join("");
+  const rate = rateFor(originCountry, destCode, mode);
+  let freightUnit = 0, anyFreight = false, freightCcyMissing = false;
+  if (rate){
+    // freight per unit by transport size, converted to SAR — computed per line below
+    anyFreight = true;
+  }
+  const freightNote = rate ? `${originLabel} → ${App.countryName(destCode)} · ${mode}${rate.transit_days ? " · ~"+rate.transit_days+"d":""}` : "No freight rate configured for this lane yet — freight excluded";
 
-  const rate0 = RATES.find(r => r.origin_country===originCountry && r.destination_country===destCode && r.mode===mode) || null;
-  const freightNote = rate0 ? `${originLabel} → ${App.countryName(destCode)} · ${mode}${rate0.transit_days ? " · ~"+rate0.transit_days+"d":""}` : "No freight rate configured for this lane yet — freight excluded";
+  let sumValue=0, sumFreight=0, sumIns=0, sumCif=0, sumDuty=0, sumVat=0, sumTotal=0, units=0, anyPOA=false;
+  const lineRows = items.map(it => {
+    const p = pricing(it); const q = p.qty; units += q;
+    if (p.lineSar == null){ anyPOA = true;
+      return `<div class="spec-row"><span class="k">${q} × ${App.esc(it.model||it.title)}</span><span class="v"><span class="muted">POA</span></span></div>`;
+    }
+    const sz = App.sizeClass(p.transport_class) || App.sizeClass("heavy");
+    let freightSar = 0;
+    if (rate){
+      const f = Number(rate.base_cost||0) + Number(rate.per_ton||0)*sz.tonnes + Number(rate.per_cbm||0)*sz.cbm;
+      const fSar = App.toSar(f, rate.currency || "GBP");
+      if (fSar == null) freightCcyMissing = true; else freightSar = fSar;
+    }
+    const valueSar = p.lineSar;              // discounted price × qty = declared value
+    const insSar = valueSar * 0.01;
+    const cifSar = valueSar + freightSar*q + insSar;
+    const duties = rule.duty_rates || {};
+    const dutyRate = (it.category in duties) ? Number(duties[it.category]) : (("default" in duties) ? Number(duties.default) : 0);
+    const dutySar = cifSar * dutyRate;
+    const vatRate = Number(rule.import_vat_rate) || 0;
+    const vatSar = (cifSar + dutySar) * vatRate;
+    const totalSar = cifSar + dutySar + vatSar;
+    sumValue+=valueSar; sumFreight+=freightSar*q; sumIns+=insSar; sumCif+=cifSar; sumDuty+=dutySar; sumVat+=vatSar; sumTotal+=totalSar;
+    return `<div class="spec-row"><span class="k">${q} × ${App.esc(it.model||it.title)}
+        <small style="font-weight:400;color:var(--muted)">· ${App.pct(dutyRate)} duty${p.disc?` · −${App.pct(p.disc)}`:""}</small></span>
+        <span class="v">${App.fmtSar(totalSar)}</span></div>`;
+  }).join("");
 
   if (!rule){
     out.innerHTML = `<div class="card" style="margin-top:18px">
       <p class="eyebrow">Manual quote needed</p>
       <h3 style="margin:6px 0">No duty &amp; VAT rules for ${App.esc(App.countryName(destCode))}</h3>
-      <p class="muted">We don't yet have import duty &amp; VAT configured for this destination, so we can't produce a full landed cost automatically.
-      ${anyFreight ? `Indicative freight only: <strong>${App.money(sumFreight, "GBP")}</strong> <small class="muted">(${App.esc(freightNote)})</small>.` : ""}
-      Send it through as a quote request and we'll price it manually.</p>
+      <p class="muted">We don't yet have import duty &amp; VAT configured for this destination, so we can't produce a full landed cost automatically. Send it through as a quote request and we'll price it manually.</p>
       ${quoteBlock(destCode)}</div>`;
     wireQuote(destCode);
     return;
@@ -176,22 +217,22 @@ function calc(){
 
   out.innerHTML = `
     <div class="card" style="margin-top:18px">
-      <p class="eyebrow">Estimated landed cost · ${App.esc(App.countryName(destCode))} · ${units} unit${units!==1?"s":""}</p>
+      <p class="eyebrow">Estimated landed cost · ${App.esc(App.countryName(destCode))} · ${units} unit${units!==1?"s":""} · ${App.esc(App.ccy())}</p>
       <div class="spec" style="margin:12px 0">
         ${lineRows}
-        <div class="spec-row" style="border-top:1px dashed var(--line,#2a2f37);margin-top:6px;padding-top:10px"><span class="k">Declared value (all units)</span><span class="v">${App.money(sumValue, ccy)}</span></div>
-        <div class="spec-row"><span class="k">Freight <small style="font-weight:400">(${App.esc(freightNote)})</small></span><span class="v">${anyFreight?App.money(sumFreight, "GBP"):"—"}</span></div>
-        <div class="spec-row"><span class="k">Insurance (≈1%)</span><span class="v">${App.money(sumIns, ccy)}</span></div>
-        <div class="spec-row"><span class="k">CIF basis</span><span class="v">${App.money(sumCif, ccy)}</span></div>
-        <div class="spec-row"><span class="k">Import duty</span><span class="v">${App.money(sumDuty, ccy)}</span></div>
+        <div class="spec-row" style="border-top:1px dashed var(--line,#2a2f37);margin-top:6px;padding-top:10px"><span class="k">Goods value (after discount)</span><span class="v">${App.fmtSar(sumValue)}</span></div>
+        <div class="spec-row"><span class="k">Freight <small style="font-weight:400">(${App.esc(freightNote)})</small></span><span class="v">${anyFreight && !freightCcyMissing ? App.fmtSar(sumFreight) : "—"}</span></div>
+        <div class="spec-row"><span class="k">Insurance (≈1%)</span><span class="v">${App.fmtSar(sumIns)}</span></div>
+        <div class="spec-row"><span class="k">CIF basis</span><span class="v">${App.fmtSar(sumCif)}</span></div>
+        <div class="spec-row"><span class="k">Import duty</span><span class="v">${App.fmtSar(sumDuty)}</span></div>
         <div class="spec-row"><span class="k">Import VAT/tax @ ${App.pct(Number(rule.import_vat_rate)||0)}
           ${rule.vat_recoverable ? '<span class="badge ok" style="margin-left:6px">recoverable</span>' : '<span class="badge neutral" style="margin-left:6px">non-recoverable</span>'}</span>
-          <span class="v">${App.money(sumVat, ccy)}</span></div>
-        <div class="spec-row" style="border-top:1px solid var(--line,#2a2f37);margin-top:6px;padding-top:10px;font-weight:700"><span class="k">Estimated landed total</span><span class="v">${App.money(sumTotal, ccy)}</span></div>
+          <span class="v">${App.fmtSar(sumVat)}</span></div>
+        <div class="spec-row" style="border-top:1px solid var(--line,#2a2f37);margin-top:6px;padding-top:10px;font-weight:700"><span class="k">Estimated landed total</span><span class="v">${App.fmtSar(sumTotal)}</span></div>
       </div>
-      <p class="muted mono" style="font-size:.72rem">Indicative band: ${App.money(sumTotal*0.9, ccy)} – ${App.money(sumTotal*1.15, ccy)}.
+      <p class="muted mono" style="font-size:.72rem">Indicative band: ${App.fmtSar(sumTotal*0.9)} – ${App.fmtSar(sumTotal*1.15)}.
         ${rule.vat_recoverable ? "VAT shown may be recoverable for registered importers — net cost can be lower." : ""}</p>
-      ${missingVal ? `<div class="note warn" style="margin-top:10px">Enter a declared unit value for every line for a complete duty &amp; VAT figure.</div>` : ""}
+      ${anyPOA ? `<div class="note warn" style="margin-top:10px">Some lines are POA (no list price set) and are excluded from the total — request a quote for those.</div>` : ""}
       ${rule.conformity_required ? `<p class="muted" style="font-size:.82rem;margin-top:10px"><strong>Conformity:</strong> ${App.esc(rule.conformity_required)}</p>` : ""}
       ${rule.restrictions_notes ? `<p class="muted" style="font-size:.82rem">${App.esc(rule.restrictions_notes)}</p>` : ""}
       ${quoteBlock(destCode)}
@@ -217,7 +258,10 @@ function wireQuote(destCode){
     const email = (document.getElementById("q-email").value||"").trim();
     if (!email){ App.toast("Add an email so we can reply", true); return; }
     const items = Basket.get();
-    const summary = items.map(it => `${it.qty} x ${it.model||it.title}${VALUES[it.id]?` @ ${VALUES[it.id]}`:""}`).join("; ");
+    const summary = items.map(it => {
+      const p = pricing(it);
+      return `${it.qty} x ${it.model||it.title}` + (p.lineSar!=null ? ` @ SAR ${Math.round(p.discUnitSar).toLocaleString()}${p.disc?` (−${App.pct(p.disc)})`:""}` : " (POA)");
+    }).join("; ");
     btn.disabled = true; btn.textContent = "Sending…";
     const session = await App.session();
     const { error } = await sb.from("leads").insert({
@@ -225,7 +269,7 @@ function wireQuote(destCode){
       category: items[0] ? items[0].category : null,
       specs: "BASKET QUOTE — " + summary,
       destination_country: destCode ? App.countryName(destCode) : null,
-      budget_currency: "GBP",
+      budget_currency: "SAR",
       user_id: session ? session.user.id : null,
     });
     btn.disabled = false; btn.textContent = "Send basket as quote request";
