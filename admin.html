@@ -106,6 +106,7 @@
             <div class="field"><label>Photo (jpg/png)</label><input id="n-image" type="file" accept="image/*"></div>
             <div class="field"><label>Manufacturer brochure (PDF)</label><input id="n-pdf" type="file" accept="application/pdf"></div>
           </div>
+          <button class="btn btn-ghost btn-sm" id="n-autofill" type="button" style="margin-bottom:8px">✨ Autofill fields from this PDF (Claude)</button>
           <button class="btn btn-amber" id="n-publish" style="width:100%;margin-top:6px">Publish crane</button>
           <p class="muted mono" id="n-status" style="font-size:.72rem;margin-top:10px"></p>
         </div>
@@ -413,6 +414,47 @@ function initStockForm(){
   DEFAULT_SPECS.forEach(k => specs.appendChild(specRow(k, "")));
   document.getElementById("n-add-spec").onclick = () => specs.appendChild(specRow("", ""));
   document.getElementById("n-publish").onclick = publishCrane;
+  document.getElementById("n-autofill").onclick = autofillFromPdf;
+}
+
+function fileToB64(file){
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(",")[1]);
+    r.onerror = rej; r.readAsDataURL(file);
+  });
+}
+function setVal(id, val){ const el = document.getElementById(id); if (el && val != null && val !== "") el.value = val; }
+function applyDraft(d){
+  if (!d) return;
+  setVal("n-title", d.title); setVal("n-mfr", d.manufacturer); setVal("n-model", d.model);
+  if (d.category){ const sel = document.getElementById("n-cat"); if ([...sel.options].some(o => o.value === d.category)) sel.value = d.category; }
+  setVal("n-year", d.year); setVal("n-cond", d.condition); setVal("n-origin", d.origin_country);
+  if (d.transport_class){ const sel = document.getElementById("n-size"); if ([...sel.options].some(o => o.value === d.transport_class)) sel.value = d.transport_class; }
+  setVal("n-summary", d.spec_summary);
+  let rows = Array.isArray(d.key_specs) ? d.key_specs.slice() : [];
+  const add = (k, val) => { if (val && !rows.some(r => r.k && r.k.toLowerCase() === k.toLowerCase())) rows.push({ k, v: val }); };
+  add("Max capacity", d.capacity); add("Main boom", d.main_boom); add("Max tip height", d.max_tip); add("Engine", d.engine);
+  if (rows.length){ const specs = document.getElementById("n-specs"); specs.innerHTML = ""; rows.forEach(r => specs.appendChild(specRow(r.k || "", r.v || ""))); }
+}
+async function autofillFromPdf(){
+  const f = document.getElementById("n-pdf").files[0];
+  const status = document.getElementById("n-status");
+  const btn = document.getElementById("n-autofill");
+  if (!f) return App.toast("Choose a PDF first", true);
+  btn.disabled = true; status.textContent = "Reading brochure with Claude…";
+  try {
+    const pdf_base64 = await fileToB64(f);
+    const { data, error } = await sb.functions.invoke("parse-brochure", { body: { pdf_base64 } });
+    if (error) throw error;
+    if (!data || !data.ok) throw new Error((data && data.error) || "parse failed");
+    applyDraft(data.draft);
+    status.textContent = "Draft filled — review every field before publishing.";
+    App.toast("Autofilled from PDF — please review.");
+  } catch (err) {
+    status.textContent = "";
+    App.toast("Autofill failed: " + (err.message || err), true);
+  } finally { btn.disabled = false; }
 }
 
 async function uploadPublic(file, prefix){
