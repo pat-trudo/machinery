@@ -214,8 +214,8 @@ window.COUNTRIES = [
 //  Helpers
 // ---------------------------------------------------------------------
 window.CURRENCIES = [
-  { code: "SAR", label: "SAR" }, { code: "AED", label: "AED" }, { code: "BHD", label: "BHD" },
-  { code: "GBP", label: "£ GBP" }, { code: "EUR", label: "€ EUR" }, { code: "USD", label: "$ USD" },
+  { code: "SAR", label: "🇸🇦 SAR" }, { code: "AED", label: "🇦🇪 AED" }, { code: "BHD", label: "🇧🇭 BHD" },
+  { code: "GBP", label: "🇬🇧 GBP" }, { code: "EUR", label: "🇪🇺 EUR" }, { code: "USD", label: "🇺🇸 USD" },
 ];
 
 const App = {
@@ -366,7 +366,7 @@ const App = {
           ${link("country-cost.html","Landed cost","cost")}
           <a href="basket.html" id="nav-basket" ${current === "basket" ? 'aria-current="page"' : ""}>Basket</a>
           ${link("account.html","Account","account")}
-          <select id="nav-ccy" aria-label="Currency" style="background:transparent;border:1px solid var(--line,#2a2f37);color:inherit;border-radius:6px;padding:3px 6px;font:inherit;font-size:.8rem"></select>
+          <select id="nav-ccy" class="nav-ccy" aria-label="Currency"></select>
           <span id="nav-auth"></span>
         </nav>
       </div></header>`;
