@@ -94,6 +94,7 @@
             <div class="field"><label>Transport size class</label><select id="n-size"></select></div>
           </div>
           <div class="field"><label>Price indication</label><input id="n-price" value="POA"></div>
+          <div class="field"><label>Asking price per unit (SAR) — leave blank for POA</label><input id="n-price-sar" type="number" min="0" step="1000" placeholder="e.g. 1950000"></div>
           <div class="field"><label>Short teaser (home card)</label><input id="n-teaser" placeholder="One-line summary buyers see on the card"></div>
           <div class="field"><label>Spec summary (product page)</label><textarea id="n-summary" rows="3" placeholder="A paragraph describing the unit."></textarea></div>
 
@@ -458,6 +459,7 @@ async function publishCrane(){
       current_location: v("n-loc") || null,
       certification: v("n-cert") || null,
       price_indication: v("n-price") || "POA",
+      price_sar: v("n-price-sar") ? Number(v("n-price-sar")) : null,
       stock_qty: v("n-qty") ? Number(v("n-qty")) : 1,
       transport_class: v("n-size") || "heavy",
       teaser: v("n-teaser") || null,
