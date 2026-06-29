@@ -167,6 +167,7 @@ App.detectCountryCode().then(topCode => {
 let ALL = [];
 
 async function loadListings() {
+  await App.loadFx(); await App.resolveCcy();
   const { data, error } = await sb.from("listings")
     .select("*").eq("status", "active").order("created_at", { ascending: false });
   if (error) { App.toast("Could not load stock", true); return; }
@@ -208,7 +209,7 @@ function render() {
           ${l.origin_country ? "Origin: " + App.esc(l.origin_country) + " · " : ""}${l.year || ""}${hrs ? "<br>Hours: " + App.esc(hrs) : ""}${l.current_location ? "<br>Located: " + App.esc(l.current_location) : ""}
         </div>
         <div class="flex" style="gap:6px">${l.certification ? `<span class="cert">${App.esc(l.certification)}</span>` : ""}</div>
-        <div class="price">${App.esc(l.price_indication || "POA")}</div>
+        <div class="price">${l.price_sar ? App.fmtSar(l.price_sar) + ' <small style="font-weight:400;color:var(--muted)">per unit' + (l.discount_tiers && Object.keys(l.discount_tiers).length ? " · multi-unit discount" : "") + '</small>' : App.esc(l.price_indication || "POA")}</div>
         <a href="${href}" class="btn btn-dark btn-sm">View details &amp; add to basket</a>
       </div>
     </article>`; }).join("");
