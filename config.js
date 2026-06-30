@@ -5,8 +5,8 @@
 // =====================================================================
 window.APP_CONFIG = {
   // From Supabase dashboard → Project Settings → API
-  SUPABASE_URL: "https://YOUR-PROJECT-REF.supabase.co", // <-- still needed: paste your Project URL
-  SUPABASE_ANON_KEY: "sb_publishable_th1ezFhvSLR3d1Vk1p3zww_g6i7H1sh", // publishable key (browser-safe)
+  SUPABASE_URL: "https://qaxdcqynqghwymbncnyl.supabase.co",
+   SUPABASE_ANON_KEY: "sb_publishable_th1ezFhvSLR3d1Vk1p3zww_g6i7H1sh",
 
   // Storage buckets created by schema.sql — leave as-is unless you renamed them
   PHOTOS_BUCKET: "machinery-photos",
