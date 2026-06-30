@@ -381,6 +381,7 @@ const App = {
   async paintNavAuth() {
     App.paintBasketCount();
     App.loadFx();
+    App.mountWhatsApp();
     const cc = document.getElementById("nav-ccy");
     if (cc && !cc.dataset.ready) {
       cc.dataset.ready = "1";
@@ -419,14 +420,25 @@ const App = {
     const vat = (cif + duty) * vatRate;
     return { freight, insurance, cif, dutyRate, duty, vatRate, vat, total: cif + duty + vat };
   },
+  mountWhatsApp() {
+    if (document.getElementById("wa-float")) return;
+    const link = App.waLink("Hello, I have an enquiry about your machinery.");
+    if (!link) return;
+    const a = document.createElement("a");
+    a.id = "wa-float"; a.href = link; a.target = "_blank"; a.rel = "noopener";
+    a.setAttribute("aria-label", "Contact us on WhatsApp");
+    a.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:9999;width:54px;height:54px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.25);text-decoration:none";
+    a.innerHTML = `<svg width="30" height="30" viewBox="0 0 32 32" fill="#fff" xmlns="http://www.w3.org/2000/svg"><path d="M16 3C9.4 3 4 8.4 4 15c0 2.1.6 4.2 1.6 6L4 29l8.2-1.6c1.8.9 3.7 1.4 5.8 1.4 6.6 0 12-5.4 12-12S22.6 3 16 3zm0 21.8c-1.8 0-3.5-.5-5-1.4l-.4-.2-4.8 1 1-4.7-.2-.4C5.5 18.4 5 16.7 5 15c0-6.1 4.9-11 11-11s11 4.9 11 11-4.9 9.8-11 9.8zm5.4-7.4c-.3-.1-1.8-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5-.1-.1-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2-1.4.3-.7.3-1.3.2-1.4-.1-.2-.3-.2-.6-.3z"/></svg>`;
+    document.body.appendChild(a);
+  },
   footer() {
     const email = (window.APP_CONFIG && window.APP_CONFIG.CONTACT_EMAIL) || "desk@example.com";
     return `<footer class="footer"><div class="wrap">
-        <strong>Indicative information only.</strong> Listings are teasers; landed-cost figures are
-        estimates, not a customs ruling, tax advice, or a binding quote. Verify duty, VAT, conformity
-        and export-control status with a licensed customs broker and qualified counsel before contracting.<br><br>
-        Contact: <a href="mailto:${App.esc(email)}">${App.esc(email)}</a> ·
-        We never publish seller identities or buyer contact details.
+        <strong>Indicative information only.</strong> Listings are summaries and landed-cost figures are
+        estimates, not a customs ruling, tax advice or a binding quote. Confirm duty, VAT, conformity
+        and export-control status with a licensed customs broker before you contract.<br><br>
+        Contact <a href="mailto:${App.esc(email)}">${App.esc(email)}</a>.
+        We do not publish seller identities or buyer contact details.
       </div></footer>`;
   },
 };
