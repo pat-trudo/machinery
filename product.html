@@ -100,10 +100,21 @@ async function boot(){
           </div>
           <button class="btn btn-amber" id="add" style="width:100%;margin-top:14px">Add to basket</button>
           <a class="btn btn-ghost btn-sm" href="basket.html" style="width:100%;margin-top:8px;text-align:center">Go to basket &amp; price destination →</a>
+          <button class="btn btn-dark btn-sm" id="offer-toggle" style="width:100%;margin-top:8px">Make an offer / enquire</button>
+          <div id="offer-form" class="hidden" style="margin-top:10px;border-top:1px solid var(--line);padding-top:12px">
+            <div class="field"><label>Your offer per unit (${App.esc(App.ccy())}) — optional</label><input id="o-amt" type="number" min="0" placeholder="leave blank to just enquire"></div>
+            <div class="two">
+              <div class="field"><label>Name</label><input id="o-name" type="text"></div>
+              <div class="field"><label>Email</label><input id="o-email" type="email"></div>
+            </div>
+            <div class="field"><label>Phone (optional)</label><input id="o-phone" type="text"></div>
+            <button class="btn btn-amber btn-sm" id="o-send" style="width:100%">Send to the desk</button>
+          </div>
+          ${App.waLink("") ? `<a class="btn btn-ghost btn-sm" id="wa-enq" style="width:100%;margin-top:8px;text-align:center" target="_blank" rel="noopener">Enquire on WhatsApp</a>` : ""}
           ${l.price_sar
             ? `<div style="margin-top:12px;text-align:center"><div style="font-weight:700;font-size:1.25rem">${App.fmtSar(l.price_sar)}<span class="muted" style="font-weight:400;font-size:.8rem"> per unit</span></div>
                  <div class="muted mono" style="font-size:.7rem;margin-top:4px">Quoted in SAR${App.ccy()!=="SAR"?" · shown in "+App.esc(App.ccy())+" at live rates":""}</div>
-                 ${(l.key_specs && false) ? "" : ""}${(l.discount_tiers && Object.keys(l.discount_tiers).length) ? `<div class="badge ok" style="margin-top:8px">Up to ${App.pct(Math.max.apply(null, Object.values(l.discount_tiers).map(Number)))} off on multiples — applied in basket</div>` : ""}</div>`
+                 ${(l.discount_tiers && Object.keys(l.discount_tiers).length) ? `<div class="badge ok" style="margin-top:8px">Up to ${App.pct(Math.max.apply(null, Object.values(l.discount_tiers).map(Number)))} off on multiples — applied in basket</div>` : ""}</div>`
             : `<p class="muted mono" style="font-size:.7rem;margin-top:10px">Price on application.</p>`}
         </div>
       </div>
@@ -121,6 +132,36 @@ async function boot(){
                  transport_class: l.transport_class, qty, max: qtyMax });
     App.toast(`Added ${qty} × ${l.model || l.title} to basket`);
   };
+
+  // make an offer / enquire
+  const offerForm = document.getElementById("offer-form");
+  document.getElementById("offer-toggle").onclick = () => offerForm.classList.toggle("hidden");
+  document.getElementById("o-send").onclick = async () => {
+    const email = (document.getElementById("o-email").value||"").trim();
+    if (!email) return App.toast("Add an email so we can reply", true);
+    const amt = (document.getElementById("o-amt").value||"").trim();
+    const name = (document.getElementById("o-name").value||"").trim();
+    const phone = (document.getElementById("o-phone").value||"").trim();
+    const btn = document.getElementById("o-send"); btn.disabled = true; btn.textContent = "Sending…";
+    const session = await App.session();
+    const specs = `${amt ? "OFFER " + amt + " " + App.ccy() + " per unit" : "ENQUIRY"} on ${l.model || l.title}` + (phone ? ` · phone ${phone}` : "");
+    const { error } = await sb.from("leads").insert({
+      name: name || null, email,
+      category: l.category,
+      specs,
+      max_budget: amt ? Number(amt) : null,
+      budget_currency: App.ccy(),
+      user_id: session ? session.user.id : null,
+    });
+    btn.disabled = false; btn.textContent = "Send to the desk";
+    if (error) return App.toast("Something went wrong — try again", true);
+    App.toast("Sent — we'll be in touch shortly.");
+    offerForm.classList.add("hidden");
+  };
+
+  // WhatsApp enquiry
+  const wa = document.getElementById("wa-enq");
+  if (wa) wa.href = App.waLink(`Hi, I'm interested in the ${l.title}${l.model ? " ("+l.model+")" : ""} listed at ${location.href}`);
 }
 
 function card(msg){ return `<div class="card" style="text-align:center;color:var(--muted);padding:48px 22px;margin-top:14px"><p>${msg}</p><p style="margin-top:12px"><a class="btn btn-dark btn-sm" href="index.html">Back to stock</a></p></div>`; }
