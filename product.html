@@ -52,6 +52,17 @@ async function boot(){
   const specs = Array.isArray(l.key_specs) ? l.key_specs : [];
   const qtyMax = l.stock_qty == null ? 1 : Math.max(1, Number(l.stock_qty));
 
+  // real view tracking — count once per device per listing
+  let views = Number(l.view_count) || 0;
+  const seenKey = "cpe_seen_" + id;
+  if (!localStorage.getItem(seenKey)) {
+    try {
+      const { data: v } = await sb.rpc("increment_view", { p_id: id });
+      if (typeof v === "number") views = v;
+      localStorage.setItem(seenKey, "1");
+    } catch (_) {}
+  }
+
   const specRows = specs.map(s =>
     `<div class="spec-row"><span class="k">${App.esc(s.k)}</span><span class="v">${App.esc(s.v)}</span></div>`).join("");
 
@@ -79,7 +90,7 @@ async function boot(){
     <div class="pgrid">
       <div>${brochure}</div>
       <div>
-        <p class="eyebrow">${App.esc(App.catLabel(l.category))}${l.stock_qty ? " · " + qtyMax + " available" : ""}</p>
+        <p class="eyebrow">${App.esc(App.catLabel(l.category))}${l.stock_qty ? " · " + qtyMax + " available" : ""}${views ? " · " + views + " view" + (views===1?"":"s") : ""}</p>
         <h1 style="margin:8px 0 6px">${App.esc(l.title)}</h1>
         <div class="flex" style="gap:8px;margin-bottom:12px">
           ${l.certification ? `<span class="cert">${App.esc(l.certification)}</span>` : ""}
@@ -154,9 +165,14 @@ async function boot(){
       user_id: session ? session.user.id : null,
     });
     btn.disabled = false; btn.textContent = "Send to the desk";
-    if (error) return App.toast("Something went wrong — try again", true);
-    App.toast("Sent — we'll be in touch shortly.");
-    offerForm.classList.add("hidden");
+    if (error) return App.toast("Something went wrong, please try again", true);
+    offerForm.innerHTML = `<div style="text-align:center;padding:14px 6px">
+        <div style="font-size:2.2rem;line-height:1">✓</div>
+        <h3 style="margin:8px 0 4px">Your request has been sent</h3>
+        <p class="muted">Thank you. We will be in touch shortly.</p>
+        <button class="btn btn-ghost btn-sm" id="o-again" style="margin-top:12px">Submit another request</button>
+      </div>`;
+    document.getElementById("o-again").onclick = () => location.reload();
   };
 
   // WhatsApp enquiry
