@@ -1,564 +1,451 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Admin · master desk</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-<div id="nav"></div>
+// =====================================================================
+//  app.js — shared data + helpers. Loaded after Supabase CDN + config.js.
+// =====================================================================
+(function () {
+  const cfg = window.APP_CONFIG || {};
+  if (!window.supabase) { console.error("Supabase CDN not loaded before app.js"); return; }
+  window.sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+})();
 
-<section class="section">
-  <div class="wrap">
+// ---------------------------------------------------------------------
+//  CATEGORY TAXONOMY (Construction). Grouped into families so a long
+//  list stays scannable. Slugs are stored in the DB; keep them stable.
+// ---------------------------------------------------------------------
+window.CATEGORY_GROUPS = [
+  { group: "Excavators", items: [
+    { slug: "crawler_excavator",      label: "Crawler excavators" },
+    { slug: "wheeled_excavator",      label: "Wheeled excavators" },
+    { slug: "mini_excavator",         label: "Mini / compact excavators" },
+    { slug: "long_reach_excavator",   label: "Long-reach excavators" },
+    { slug: "demolition_excavator",   label: "Demolition excavators" },
+    { slug: "material_handler",       label: "Material handlers" },
+    { slug: "mining_shovel",          label: "Mining excavators / shovels" },
+  ]},
+  { group: "Loaders", items: [
+    { slug: "wheel_loader",           label: "Wheel loaders" },
+    { slug: "compact_wheel_loader",   label: "Compact wheel loaders" },
+    { slug: "skid_steer_loader",      label: "Skid-steer loaders" },
+    { slug: "compact_track_loader",   label: "Compact track loaders" },
+    { slug: "backhoe_loader",         label: "Backhoe loaders" },
+    { slug: "crawler_loader",         label: "Track / crawler loaders" },
+    { slug: "telescopic_wheel_loader",label: "Telescopic wheel loaders" },
+  ]},
+  { group: "Dozers & Graders", items: [
+    { slug: "crawler_dozer",          label: "Crawler dozers (bulldozers)" },
+    { slug: "wheel_dozer",            label: "Wheel dozers" },
+    { slug: "motor_grader",           label: "Motor graders" },
+  ]},
+  { group: "Hauling & Dumpers", items: [
+    { slug: "articulated_dump_truck", label: "Articulated dump trucks (ADT)" },
+    { slug: "rigid_dump_truck",       label: "Rigid dump trucks" },
+    { slug: "site_dumper",            label: "Site dumpers" },
+    { slug: "motor_scraper",          label: "Scrapers" },
+  ]},
+  { group: "Cranes & Lifting", items: [
+    { slug: "all_terrain_crane",      label: "All-terrain mobile cranes" },
+    { slug: "rough_terrain_crane",    label: "Rough-terrain cranes" },
+    { slug: "truck_mounted_crane",    label: "Truck-mounted cranes" },
+    { slug: "crawler_crane",          label: "Crawler cranes" },
+    { slug: "tower_crane",            label: "Tower cranes" },
+    { slug: "loader_crane",           label: "Loader / knuckle-boom cranes" },
+    { slug: "spider_crane",           label: "Mini / spider cranes" },
+    { slug: "gantry_crane",           label: "Gantry & overhead cranes" },
+    { slug: "port_crane",             label: "Port / marine cranes" },
+  ]},
+  { group: "Aerial Access (MEWPs)", items: [
+    { slug: "scissor_lift",           label: "Scissor lifts" },
+    { slug: "articulating_boom_lift", label: "Articulating boom lifts" },
+    { slug: "telescopic_boom_lift",   label: "Telescopic boom lifts" },
+    { slug: "spider_lift",            label: "Spider / tracked lifts" },
+    { slug: "truck_mounted_platform", label: "Truck-mounted platforms" },
+  ]},
+  { group: "Material Handling", items: [
+    { slug: "telehandler",            label: "Telehandlers" },
+    { slug: "rotating_telehandler",   label: "Rotating telehandlers" },
+    { slug: "counterbalance_forklift",label: "Counterbalance forklifts" },
+    { slug: "rough_terrain_forklift", label: "Rough-terrain forklifts" },
+    { slug: "reach_stacker",          label: "Reach stackers" },
+    { slug: "container_handler",      label: "Container / empty handlers" },
+  ]},
+  { group: "Concrete & Cement", items: [
+    { slug: "truck_concrete_pump",    label: "Truck-mounted concrete pumps" },
+    { slug: "stationary_concrete_pump",label: "Trailer / stationary pumps" },
+    { slug: "concrete_mixer_truck",   label: "Concrete mixer trucks" },
+    { slug: "batching_plant",         label: "Concrete batching plants" },
+    { slug: "placing_boom",           label: "Concrete placing booms" },
+    { slug: "power_trowel",           label: "Power trowels / floats" },
+  ]},
+  { group: "Road Building & Compaction", items: [
+    { slug: "asphalt_paver",          label: "Asphalt pavers" },
+    { slug: "cold_planer",            label: "Cold planers / milling machines" },
+    { slug: "single_drum_roller",     label: "Single-drum rollers" },
+    { slug: "tandem_roller",          label: "Tandem rollers" },
+    { slug: "pneumatic_roller",       label: "Pneumatic-tyred rollers" },
+    { slug: "plate_compactor",        label: "Plate compactors" },
+    { slug: "trench_roller",          label: "Trench rollers" },
+    { slug: "road_sweeper",           label: "Road sweepers" },
+  ]},
+  { group: "Drilling & Foundations", items: [
+    { slug: "piling_rig",             label: "Piling rigs" },
+    { slug: "rotary_drill_rig",       label: "Rotary drilling rigs" },
+    { slug: "hdd_rig",                label: "Horizontal directional drills" },
+    { slug: "surface_drill",          label: "Blast-hole / surface drills" },
+    { slug: "diaphragm_wall_rig",     label: "Diaphragm wall rigs" },
+    { slug: "soil_mixing_rig",        label: "Soil-mixing rigs" },
+  ]},
+  { group: "Crushing & Screening", items: [
+    { slug: "jaw_crusher",            label: "Jaw crushers" },
+    { slug: "cone_crusher",           label: "Cone crushers" },
+    { slug: "impact_crusher",         label: "Impact crushers" },
+    { slug: "mobile_screen",          label: "Mobile screens" },
+    { slug: "trommel_screen",         label: "Trommel screens" },
+    { slug: "stacker_conveyor",       label: "Stackers / conveyors" },
+  ]},
+  { group: "Power & Site Support", items: [
+    { slug: "diesel_generator",       label: "Diesel generators" },
+    { slug: "lighting_tower",         label: "Lighting towers" },
+    { slug: "air_compressor",         label: "Mobile compressors" },
+    { slug: "dewatering_pump",        label: "Dewatering pumps" },
+    { slug: "site_cabin",             label: "Site accommodation / cabins" },
+  ]},
+  { group: "Attachments", items: [
+    { slug: "hydraulic_breaker",      label: "Hydraulic breakers / hammers" },
+    { slug: "bucket_attachment",      label: "Buckets" },
+    { slug: "grapple",                label: "Grapples" },
+    { slug: "auger",                  label: "Augers" },
+    { slug: "pulveriser_shear",       label: "Pulverisers / shears" },
+  ]},
+];
 
-    <!-- LOGIN (signed out) -->
-    <div id="login" class="card hidden" style="max-width:420px;margin:0 auto">
-      <p class="eyebrow">Master login</p>
-      <h2 style="margin:8px 0 16px">Admin sign in</h2>
-      <div class="field"><label for="a-email">Email</label><input id="a-email" type="email" /></div>
-      <div class="field"><label for="a-pw">Password</label><input id="a-pw" type="password" /></div>
-      <button class="btn btn-dark" id="a-in" style="width:100%">Sign in</button>
-    </div>
+// flat lookup map (slug -> label) built once
+window.CAT_LABEL = (function () {
+  const m = {};
+  window.CATEGORY_GROUPS.forEach(g => g.items.forEach(i => { m[i.slug] = i.label; }));
+  return m;
+})();
 
-    <!-- DENIED (signed in, not admin) -->
-    <div id="denied" class="card hidden" style="max-width:460px;margin:0 auto;border-color:var(--danger)">
-      <span class="badge warn">Access denied</span>
-      <h2 style="margin:12px 0 8px">This area is admin-only</h2>
-      <p class="muted">Your account doesn't have admin rights. If that's wrong, ask an existing admin to grant your role.</p>
-      <button class="btn btn-ghost btn-sm" id="d-out" style="margin-top:14px">Sign out</button>
-    </div>
+window.MODES = [
+  { slug: "sea",  label: "Sea freight" },
+  { slug: "air",  label: "Air freight" },
+  { slug: "road", label: "Road freight" },
+];
 
-    <!-- DASHBOARD (admin) -->
-    <div id="app" class="hidden">
-      <div class="flex between" style="margin-bottom:18px">
-        <div><p class="eyebrow">Master desk</p><h1 style="margin-top:6px">Operations</h1></div>
-        <button class="btn btn-ghost btn-sm" id="out">Sign out</button>
-      </div>
+// Rough size classes replace asking the user for tonnes/m³.
+// Each carries a representative weight + volume used by the freight model.
+window.SIZE_CLASSES = [
+  { id: "compact",    label: "Compact / small — fits a container (≈ up to 5 t)", tonnes: 4,  cbm: 25 },
+  { id: "medium",     label: "Medium — single low-loader (≈ 5–18 t)",            tonnes: 12, cbm: 45 },
+  { id: "large",      label: "Large — heavy low-loader (≈ 18–35 t)",             tonnes: 28, cbm: 70 },
+  { id: "heavy",      label: "Heavy — multi-axle / flat-rack (≈ 35–60 t)",       tonnes: 48, cbm: 110 },
+  { id: "superheavy", label: "Super-heavy / abnormal load (≈ 60 t+)",            tonnes: 80, cbm: 160 },
+];
 
-      <div class="tabs" id="tabs">
-        <button class="tab active" data-pane="dash">Dashboard</button>
-        <button class="tab" data-pane="leads">Leads</button>
-        <button class="tab" data-pane="subs">Submissions</button>
-        <button class="tab" data-pane="stock">Stock</button>
-        <button class="tab" data-pane="rates">Shipping rates</button>
-        <button class="tab" data-pane="rules">Country rules</button>
-      </div>
+// GCC origin cities (mapped to an ISO-2 country for rate lookup).
+window.GCC_ORIGINS = [
+  { country: "SA", country_name: "Saudi Arabia", items: [
+    { id: "jeddah",   country: "SA", label: "Jeddah (Jeddah Islamic Port)" },
+    { id: "dammam",   country: "SA", label: "Dammam (King Abdulaziz Port)" },
+    { id: "jubail",   country: "SA", label: "Jubail Commercial Port" },
+    { id: "yanbu",    country: "SA", label: "Yanbu Commercial Port" },
+    { id: "kap",      country: "SA", label: "King Abdullah Port (Rabigh)" },
+    { id: "riyadh",   country: "SA", label: "Riyadh (dry port / inland)" },
+  ]},
+  { country: "AE", country_name: "United Arab Emirates", items: [
+    { id: "jebelali", country: "AE", label: "Jebel Ali (Dubai)" },
+    { id: "dubai",    country: "AE", label: "Dubai (Port Rashid)" },
+    { id: "abudhabi", country: "AE", label: "Abu Dhabi (Khalifa Port)" },
+    { id: "sharjah",  country: "AE", label: "Sharjah / Khorfakkan" },
+    { id: "fujairah", country: "AE", label: "Fujairah" },
+  ]},
+  { country: "BH", country_name: "Bahrain", items: [
+    { id: "hidd",     country: "BH", label: "Hidd (Khalifa Bin Salman Port)" },
+    { id: "manama",   country: "BH", label: "Manama" },
+  ]},
+  { country: "QA", country_name: "Qatar", items: [
+    { id: "hamad",    country: "QA", label: "Hamad Port" },
+    { id: "doha",     country: "QA", label: "Doha" },
+  ]},
+];
 
-      <!-- DASH -->
-      <div class="pane" id="pane-dash">
-        <div id="stat-leads" class="grid"></div>
-      </div>
+// ISO-2 country list (trade-relevant; alphabetical handled at render).
+window.COUNTRIES = [
+  {code:"AF",name:"Afghanistan"},{code:"AL",name:"Albania"},{code:"DZ",name:"Algeria"},{code:"AO",name:"Angola"},
+  {code:"AR",name:"Argentina"},{code:"AM",name:"Armenia"},{code:"AU",name:"Australia"},{code:"AT",name:"Austria"},
+  {code:"AZ",name:"Azerbaijan"},{code:"BH",name:"Bahrain"},{code:"BD",name:"Bangladesh"},{code:"BY",name:"Belarus"},
+  {code:"BE",name:"Belgium"},{code:"BJ",name:"Benin"},{code:"BO",name:"Bolivia"},{code:"BA",name:"Bosnia & Herzegovina"},
+  {code:"BW",name:"Botswana"},{code:"BR",name:"Brazil"},{code:"BN",name:"Brunei"},{code:"BG",name:"Bulgaria"},
+  {code:"BF",name:"Burkina Faso"},{code:"KH",name:"Cambodia"},{code:"CM",name:"Cameroon"},{code:"CA",name:"Canada"},
+  {code:"TD",name:"Chad"},{code:"CL",name:"Chile"},{code:"CN",name:"China"},{code:"CO",name:"Colombia"},
+  {code:"CG",name:"Congo (Rep.)"},{code:"CD",name:"Congo (DRC)"},{code:"CR",name:"Costa Rica"},{code:"CI",name:"Côte d'Ivoire"},
+  {code:"HR",name:"Croatia"},{code:"CU",name:"Cuba"},{code:"CY",name:"Cyprus"},{code:"CZ",name:"Czechia"},
+  {code:"DK",name:"Denmark"},{code:"DJ",name:"Djibouti"},{code:"DO",name:"Dominican Republic"},{code:"EC",name:"Ecuador"},
+  {code:"EG",name:"Egypt"},{code:"SV",name:"El Salvador"},{code:"GQ",name:"Equatorial Guinea"},{code:"EE",name:"Estonia"},
+  {code:"ET",name:"Ethiopia"},{code:"FI",name:"Finland"},{code:"FR",name:"France"},{code:"GA",name:"Gabon"},
+  {code:"GE",name:"Georgia"},{code:"DE",name:"Germany"},{code:"GH",name:"Ghana"},{code:"GR",name:"Greece"},
+  {code:"GT",name:"Guatemala"},{code:"GN",name:"Guinea"},{code:"GY",name:"Guyana"},{code:"HN",name:"Honduras"},
+  {code:"HK",name:"Hong Kong"},{code:"HU",name:"Hungary"},{code:"IS",name:"Iceland"},{code:"IN",name:"India"},
+  {code:"ID",name:"Indonesia"},{code:"IR",name:"Iran"},{code:"IQ",name:"Iraq"},{code:"IE",name:"Ireland"},
+  {code:"IL",name:"Israel"},{code:"IT",name:"Italy"},{code:"JM",name:"Jamaica"},{code:"JP",name:"Japan"},
+  {code:"JO",name:"Jordan"},{code:"KZ",name:"Kazakhstan"},{code:"KE",name:"Kenya"},{code:"KW",name:"Kuwait"},
+  {code:"KG",name:"Kyrgyzstan"},{code:"LA",name:"Laos"},{code:"LV",name:"Latvia"},{code:"LB",name:"Lebanon"},
+  {code:"LY",name:"Libya"},{code:"LT",name:"Lithuania"},{code:"LU",name:"Luxembourg"},{code:"MG",name:"Madagascar"},
+  {code:"MW",name:"Malawi"},{code:"MY",name:"Malaysia"},{code:"ML",name:"Mali"},{code:"MT",name:"Malta"},
+  {code:"MR",name:"Mauritania"},{code:"MU",name:"Mauritius"},{code:"MX",name:"Mexico"},{code:"MD",name:"Moldova"},
+  {code:"MN",name:"Mongolia"},{code:"ME",name:"Montenegro"},{code:"MA",name:"Morocco"},{code:"MZ",name:"Mozambique"},
+  {code:"MM",name:"Myanmar"},{code:"NA",name:"Namibia"},{code:"NP",name:"Nepal"},{code:"NL",name:"Netherlands"},
+  {code:"NZ",name:"New Zealand"},{code:"NI",name:"Nicaragua"},{code:"NE",name:"Niger"},{code:"NG",name:"Nigeria"},
+  {code:"MK",name:"North Macedonia"},{code:"NO",name:"Norway"},{code:"OM",name:"Oman"},{code:"PK",name:"Pakistan"},
+  {code:"PA",name:"Panama"},{code:"PG",name:"Papua New Guinea"},{code:"PY",name:"Paraguay"},{code:"PE",name:"Peru"},
+  {code:"PH",name:"Philippines"},{code:"PL",name:"Poland"},{code:"PT",name:"Portugal"},{code:"QA",name:"Qatar"},
+  {code:"RO",name:"Romania"},{code:"RU",name:"Russia"},{code:"RW",name:"Rwanda"},{code:"SA",name:"Saudi Arabia"},
+  {code:"SN",name:"Senegal"},{code:"RS",name:"Serbia"},{code:"SL",name:"Sierra Leone"},{code:"SG",name:"Singapore"},
+  {code:"SK",name:"Slovakia"},{code:"SI",name:"Slovenia"},{code:"SO",name:"Somalia"},{code:"ZA",name:"South Africa"},
+  {code:"KR",name:"South Korea"},{code:"SS",name:"South Sudan"},{code:"ES",name:"Spain"},{code:"LK",name:"Sri Lanka"},
+  {code:"SD",name:"Sudan"},{code:"SE",name:"Sweden"},{code:"CH",name:"Switzerland"},{code:"SY",name:"Syria"},
+  {code:"TW",name:"Taiwan"},{code:"TJ",name:"Tajikistan"},{code:"TZ",name:"Tanzania"},{code:"TH",name:"Thailand"},
+  {code:"TG",name:"Togo"},{code:"TT",name:"Trinidad & Tobago"},{code:"TN",name:"Tunisia"},{code:"TR",name:"Türkiye"},
+  {code:"TM",name:"Turkmenistan"},{code:"UG",name:"Uganda"},{code:"UA",name:"Ukraine"},{code:"AE",name:"United Arab Emirates"},
+  {code:"GB",name:"United Kingdom"},{code:"US",name:"United States"},{code:"UY",name:"Uruguay"},{code:"UZ",name:"Uzbekistan"},
+  {code:"VE",name:"Venezuela"},{code:"VN",name:"Vietnam"},{code:"YE",name:"Yemen"},{code:"ZM",name:"Zambia"},
+  {code:"ZW",name:"Zimbabwe"},
+];
 
-      <!-- LEADS -->
-      <div class="pane hidden" id="pane-leads">
-        <h3 style="margin-bottom:12px">All leads <span class="badge neutral" id="c-leads"></span></h3>
-        <div class="table-wrap"><table id="t-leads"></table></div>
-      </div>
+// ---------------------------------------------------------------------
+//  Helpers
+// ---------------------------------------------------------------------
+window.CURRENCIES = [
+  { code: "SAR", label: "🇸🇦 SAR" }, { code: "AED", label: "🇦🇪 AED" }, { code: "BHD", label: "🇧🇭 BHD" },
+  { code: "GBP", label: "🇬🇧 GBP" }, { code: "EUR", label: "🇪🇺 EUR" }, { code: "USD", label: "🇺🇸 USD" },
+];
 
-      <!-- SUBMISSIONS -->
-      <div class="pane hidden" id="pane-subs">
-        <h3 style="margin-bottom:12px">All submissions <span class="badge neutral" id="c-subs"></span></h3>
-        <div class="table-wrap"><table id="t-subs"></table></div>
-        <div id="promote" class="hidden card" style="margin-top:20px"></div>
-      </div>
+const App = {
+  catLabel(slug) {
+    if (!slug) return "—";
+    const m = window.CAT_LABEL || {};
+    if (m[slug]) return m[slug];
+    return String(slug).replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  },
+  countryName(code) { const c = (window.COUNTRIES||[]).find(x => x.code === code); return c ? c.name : code; },
+  sizeClass(id) { return (window.SIZE_CLASSES||[]).find(s => s.id === id) || null; },
 
-      <div class="pane hidden" id="pane-stock">
-        <h3 style="margin-bottom:6px">Add a crane</h3>
-        <p class="muted" style="font-size:.85rem;margin-bottom:14px">Fill the details, add the spec rows that appear on the listing, and upload a photo + the manufacturer PDF. Publishing makes it live on the home page.</p>
-        <div class="card">
-          <div class="two">
-            <div class="field"><label>Title</label><input id="n-title" placeholder="Grove GRT8100 — 100 t rough-terrain crane"></div>
-            <div class="field"><label>Category</label><select id="n-cat"></select></div>
-          </div>
-          <div class="two">
-            <div class="field"><label>Manufacturer</label><input id="n-mfr" value="Grove"></div>
-            <div class="field"><label>Model</label><input id="n-model" placeholder="GRT8100"></div>
-          </div>
-          <div class="two">
-            <div class="field"><label>Year of manufacture</label><input id="n-year" type="number" placeholder="2024"></div>
-            <div class="field"><label>Operating hours</label><input id="n-hours" placeholder="0 h — new / unused"></div>
-          </div>
-          <div class="two">
-            <div class="field"><label>Condition</label><input id="n-cond" placeholder="New / unused"></div>
-            <div class="field"><label>Certification</label><input id="n-cert" value="CE"></div>
-          </div>
-          <div class="two">
-            <div class="field"><label>Country of build (origin)</label><input id="n-origin" placeholder="Italy"></div>
-            <div class="field"><label>Current location</label><input id="n-loc" value="Saudi Arabia"></div>
-          </div>
-          <div class="two">
-            <div class="field"><label>Units in stock</label><input id="n-qty" type="number" min="1" value="1"></div>
-            <div class="field"><label>Transport size class</label><select id="n-size"></select></div>
-          </div>
-          <div class="field"><label>Price indication</label><input id="n-price" value="POA"></div>
-          <div class="field"><label>Asking price per unit (SAR) — leave blank for POA</label><input id="n-price-sar" type="number" min="0" step="1000" placeholder="e.g. 1950000"></div>
-          <div class="field"><label>Short teaser (home card)</label><input id="n-teaser" placeholder="One-line summary buyers see on the card"></div>
-          <div class="field"><label>Spec summary (product page)</label><textarea id="n-summary" rows="3" placeholder="A paragraph describing the unit."></textarea></div>
+  // ---- currency / FX (base = SAR) ----
+  fxRates: null,
+  async loadFx() {
+    if (App.fxRates) return App.fxRates;
+    try {
+      const c = JSON.parse(sessionStorage.getItem("cpe_fx") || "null");
+      if (c && (Date.now() - c.t) < 6 * 3600 * 1000 && c.rates) { App.fxRates = c.rates; return App.fxRates; }
+    } catch (_) {}
+    try {
+      const r = await fetch("https://open.er-api.com/v6/latest/SAR", { cache: "no-store" });
+      const j = await r.json();
+      if (j && j.rates) { App.fxRates = j.rates; try { sessionStorage.setItem("cpe_fx", JSON.stringify({ t: Date.now(), rates: j.rates })); } catch (_) {} }
+    } catch (_) { App.fxRates = null; }
+    return App.fxRates;
+  },
+  _ccyResolved: null,
+  async resolveCcy() {
+    if (App._ccyResolved) return App._ccyResolved;
+    let c = null; try { c = localStorage.getItem("cpe_ccy"); } catch (_) {}
+    if (!c) { const code = await App.detectCountryCode(); c = App.defaultCcyFor(code || ""); }
+    App._ccyResolved = c; return c;
+  },
+  ccy() { return App._ccyResolved || (function(){ try { return localStorage.getItem("cpe_ccy"); } catch(_) { return null; } })() || "SAR"; },
+  setCcy(c) { App._ccyResolved = c; try { localStorage.setItem("cpe_ccy", c); } catch (_) {} },
+  defaultCcyFor(code) {
+    const EU = ["AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IE","IT","LV","LT","LU","MT","NL","PL","PT","RO","SK","SI","ES","SE"];
+    if (code === "SA") return "SAR"; if (code === "AE") return "AED"; if (code === "BH") return "BHD";
+    if (code === "GB") return "GBP"; if (code === "US") return "USD"; if (EU.includes(code)) return "EUR";
+    return "USD";
+  },
+  // convert an SAR amount into a currency; null if no rate
+  convertSar(amtSar, ccy) {
+    ccy = ccy || App.ccy();
+    if (ccy === "SAR") return amtSar;
+    if (!App.fxRates || !App.fxRates[ccy]) return null;
+    return amtSar * App.fxRates[ccy];
+  },
+  // convert an amount in some currency back to SAR
+  toSar(amt, fromCcy) {
+    if (!fromCcy || fromCcy === "SAR") return amt;
+    if (!App.fxRates || !App.fxRates[fromCcy]) return null;
+    return amt / App.fxRates[fromCcy];
+  },
+  // format an SAR amount in the active currency (falls back to SAR)
+  fmtSar(amtSar, ccy) {
+    ccy = ccy || App.ccy();
+    const v = App.convertSar(amtSar, ccy);
+    if (v == null) return App.money(amtSar, "SAR");
+    return App.money(v, ccy);
+  },
+  // highest discount fraction whose min-qty <= qty
+  discountRate(tiers, qty) {
+    if (!tiers || typeof tiers !== "object") return 0;
+    let best = 0;
+    for (const k in tiers) { if (qty >= Number(k)) best = Math.max(best, Number(tiers[k]) || 0); }
+    return best;
+  },
 
-          <label style="font-weight:600;display:block;margin:8px 0 6px">Specification rows <span class="muted" style="font-weight:400">— these become the spec table on the listing</span></label>
-          <div id="n-specs"></div>
-          <button class="btn btn-ghost btn-sm" id="n-add-spec" type="button">+ Add spec row</button>
 
-          <div class="two" style="margin-top:14px">
-            <div class="field"><label>Photo (jpg/png)</label><input id="n-image" type="file" accept="image/*"></div>
-            <div class="field"><label>Manufacturer brochure (PDF)</label><input id="n-pdf" type="file" accept="application/pdf"></div>
-          </div>
-          <button class="btn btn-ghost btn-sm" id="n-autofill" type="button" style="margin-bottom:8px">✨ Autofill fields from this PDF (Claude)</button>
-          <button class="btn btn-amber" id="n-publish" style="width:100%;margin-top:6px">Publish crane</button>
-          <p class="muted mono" id="n-status" style="font-size:.72rem;margin-top:10px"></p>
-        </div>
+  money(n, ccy = "GBP") {
+    if (n == null || isNaN(n)) return "—";
+    try { return new Intl.NumberFormat("en-GB", { style: "currency", currency: ccy, maximumFractionDigits: 0 }).format(n); }
+    catch (_) { return ccy + " " + Math.round(n).toLocaleString(); }
+  },
+  pct(r) { return (r == null ? 0 : r * 100).toFixed((r * 100) % 1 ? 1 : 0) + "%"; },
+  date(s) { return s ? new Date(s).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"; },
+  esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); },
+  toast(msg, isErr) {
+    const t = document.createElement("div");
+    t.className = "toast" + (isErr ? " err" : ""); t.textContent = msg;
+    document.body.appendChild(t); setTimeout(() => t.remove(), 3800);
+  },
 
-        <h3 style="margin:24px 0 12px">Current stock <span class="badge neutral" id="c-stock"></span></h3>
-        <div class="table-wrap"><table id="t-stock"></table></div>
-      </div>
+  // ---- select builders ----
+  fillCategorySelect(sel, opts) {
+    opts = opts || {};
+    let html = opts.includeAll ? '<option value="">All categories</option>' : '<option value="">Select category…</option>';
+    html += window.CATEGORY_GROUPS.map(g =>
+      `<optgroup label="${App.esc(g.group)}">` +
+      g.items.map(i => `<option value="${i.slug}">${App.esc(i.label)}</option>`).join("") +
+      `</optgroup>`).join("");
+    sel.innerHTML = html;
+  },
+  fillModeSelect(sel) { sel.innerHTML = window.MODES.map(m => `<option value="${m.slug}">${m.label}</option>`).join(""); },
+  fillSizeSelect(sel) {
+    sel.innerHTML = '<option value="">Select rough size…</option>' +
+      window.SIZE_CLASSES.map(s => `<option value="${s.id}">${App.esc(s.label)}</option>`).join("");
+  },
+  fillOriginSelect(sel) {
+    sel.innerHTML = window.GCC_ORIGINS.map(g =>
+      `<optgroup label="${App.esc(g.country_name)}">` +
+      g.items.map(i => `<option value="${i.id}" data-country="${i.country}">${App.esc(i.label)}</option>`).join("") +
+      `</optgroup>`).join("");
+  },
+  fillCountrySelect(sel, opts) {
+    opts = opts || {};
+    const list = window.COUNTRIES.slice().sort((a, b) => a.name.localeCompare(b.name));
+    let html = opts.includeBlank ? '<option value="">Select…</option>' : "";
+    if (opts.topCode) {
+      const top = list.find(c => c.code === opts.topCode);
+      if (top) html += `<option value="${top.code}" selected>${App.esc(top.name)}</option><option disabled>──────────</option>`;
+    }
+    html += list.map(c => `<option value="${c.code}">${App.esc(c.name)}</option>`).join("");
+    sel.innerHTML = html;
+  },
 
-      <!-- SHIPPING RATES -->
-      <div class="pane hidden" id="pane-rates">
-        <div class="flex between" style="margin-bottom:12px">
-          <h3>Shipping rates <span class="muted" style="font-weight:400;font-size:.85rem">— edit, then Save each row</span></h3>
-          <button class="btn btn-amber btn-sm" id="add-rate">+ Add route</button>
-        </div>
-        <div class="table-wrap"><table id="t-rates"></table></div>
-        <p class="muted mono" style="font-size:.72rem;margin-top:10px">freight = base + per_ton·tonnes + per_cbm·m³</p>
-      </div>
-
-      <!-- COUNTRY RULES -->
-      <div class="pane hidden" id="pane-rules">
-        <div class="flex between" style="margin-bottom:12px">
-          <h3>Country rules <span class="muted" style="font-weight:400;font-size:.85rem">— edit, then Save each row</span></h3>
-          <button class="btn btn-amber btn-sm" id="add-rule">+ Add country</button>
-        </div>
-        <div class="table-wrap"><table id="t-rules"></table></div>
-        <p class="muted mono" style="font-size:.72rem;margin-top:10px">duty_rates is JSON keyed by category slug, e.g. {"mobile_crane":0,"default":0.05}. Set sanctioned=true to make the tool refuse a destination.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<div id="footer"></div>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js"></script>
-<script src="app.js"></script>
-<script>
-document.getElementById("nav").innerHTML = App.nav("admin");
-document.getElementById("footer").innerHTML = App.footer();
-App.paintNavAuth();
-
-document.getElementById("a-in").onclick = async () => {
-  const { error } = await sb.auth.signInWithPassword({ email: v("a-email"), password: v("a-pw") });
-  if (error) return App.toast(error.message, true);
-  gate();
-};
-document.getElementById("out").onclick = () => App.signOut();
-document.getElementById("d-out").onclick = () => App.signOut();
-
-// tabs
-document.querySelectorAll("#tabs .tab").forEach(t => t.onclick = () => {
-  document.querySelectorAll("#tabs .tab").forEach(x => x.classList.remove("active"));
-  t.classList.add("active");
-  document.querySelectorAll(".pane").forEach(p => p.classList.add("hidden"));
-  document.getElementById("pane-" + t.dataset.pane).classList.remove("hidden");
-});
-
-// ---- gate: admin only ----
-async function gate() {
-  const s = await App.session();
-  const show = (id) => ["login","denied","app"].forEach(x => document.getElementById(x).classList.toggle("hidden", x !== id));
-  if (!s) return show("login");
-  const prof = await App.profile();
-  if (!prof || prof.role !== "admin") return show("denied");
-  show("app");
-  loadAll();
-}
-
-async function loadAll() {
-  const [leads, subs, listings, matches] = await Promise.all([
-    sb.from("leads").select("*").order("created_at", { ascending: false }),
-    sb.from("machinery_submissions").select("*").order("created_at", { ascending: false }),
-    sb.from("listings").select("*").order("created_at", { ascending: false }),
-    sb.from("matches").select("*"),
-  ]);
-  paintStats({ leads: leads.data||[], subs: subs.data||[], listings: listings.data||[], matches: matches.data||[] });
-  paintLeads(leads.data||[]);
-  paintSubs(subs.data||[]);
-  loadStock();
-  loadRates();
-  loadRules();
-}
-
-// ---- dashboard stats + 30/90 trends ----
-function within(rows, days){ const cut = Date.now() - days*864e5; return rows.filter(r => new Date(r.created_at).getTime() >= cut).length; }
-function paintStats(d){
-  const block = (label, rows) => `
-    <div class="stat">
-      <div class="n">${rows.length}</div>
-      <div class="l">${label} · total</div>
-      <div class="trend">30d <strong>${within(rows,30)}</strong> &nbsp;·&nbsp; 90d <strong>${within(rows,90)}</strong></div>
-    </div>`;
-  const wrap = document.getElementById("stat-leads");
-  wrap.className = "stats";
-  wrap.innerHTML = block("Leads", d.leads) + block("Submissions", d.subs) + block("Listings", d.listings) + block("Matches", d.matches);
-}
-
-// ---- leads table ----
-function paintLeads(rows){
-  document.getElementById("c-leads").textContent = rows.length;
-  const t = document.getElementById("t-leads");
-  t.innerHTML = `<thead><tr><th>Date</th><th>Name</th><th>Email</th><th>Category</th><th>Destination</th><th>Budget</th><th>Timeline</th><th>Specs</th></tr></thead><tbody>` +
-    rows.map(l => `<tr>
-      <td>${App.date(l.created_at)}</td><td>${App.esc(l.name)}</td><td>${App.esc(l.email)}</td>
-      <td>${App.esc(App.catLabel(l.category))}</td><td>${App.esc(l.destination_country||"—")}</td>
-      <td>${l.max_budget?App.money(l.max_budget,l.budget_currency||"GBP"):"—"}</td>
-      <td>${App.esc(l.timeline||"—")}</td><td style="white-space:normal;max-width:280px">${App.esc(l.specs||"")}</td>
-    </tr>`).join("") + `</tbody>`;
-}
-
-// ---- submissions table + promote ----
-function paintSubs(rows){
-  document.getElementById("c-subs").textContent = rows.length;
-  const t = document.getElementById("t-subs");
-  t.innerHTML = `<thead><tr><th>Date</th><th>Title</th><th>Category</th><th>Make/Model</th><th>Year</th><th>Hrs</th><th>Origin</th><th>Asking</th><th>Files</th><th>Status</th><th></th></tr></thead><tbody>` +
-    rows.map(d => `<tr>
-      <td>${App.date(d.created_at)}</td><td>${App.esc(d.title)}</td><td>${App.esc(App.catLabel(d.category))}</td>
-      <td>${App.esc(d.manufacturer||"")} ${App.esc(d.model||"")}</td><td>${d.year||""}</td><td>${d.hours||""}</td>
-      <td>${App.esc(d.origin_country||"")}</td><td>${d.asking_price?App.money(d.asking_price,d.currency||"EUR"):"—"}</td>
-      <td>${(d.photos||[]).length}/${(d.docs||[]).length}</td>
-      <td>
-        <select data-status="${d.id}" class="sub-status">
-          ${["submitted","under_review","approved","rejected","listed"].map(s=>`<option ${d.status===s?"selected":""}>${s}</option>`).join("")}
-        </select>
-      </td>
-      <td><button class="btn btn-amber btn-sm" data-promote="${d.id}">Promote →</button></td>
-    </tr>`).join("") + `</tbody>`;
-
-  t.querySelectorAll(".sub-status").forEach(sel => sel.onchange = async () => {
-    const { error } = await sb.from("machinery_submissions").update({ status: sel.value }).eq("id", sel.dataset.status);
-    App.toast(error ? error.message : "Status updated", !!error);
-  });
-  t.querySelectorAll("[data-promote]").forEach(b => b.onclick = () => openPromote(rows.find(r => r.id === b.dataset.promote)));
-}
-
-function openPromote(d){
-  const box = document.getElementById("promote");
-  box.classList.remove("hidden");
-  box.scrollIntoView({ behavior: "smooth" });
-  box.innerHTML = `
-    <div class="flex between"><h3>Promote to public teaser</h3><button class="btn btn-ghost btn-sm" id="pr-cancel">Close</button></div>
-    <p class="muted" style="font-size:.85rem;margin:6px 0 14px">Clear any field you don't want to expose publicly. Seller identity is never copied across.</p>
-    <div class="two">
-      <div class="field"><label>Title</label><input id="pr-title" value="${App.esc(d.title)}"></div>
-      <div class="field"><label>Category</label><select id="pr-cat"></select></div>
-    </div>
-    <div class="two">
-      <div class="field"><label>Manufacturer</label><input id="pr-mfr" value="${App.esc(d.manufacturer||"")}"></div>
-      <div class="field"><label>Model</label><input id="pr-model" value="${App.esc(d.model||"")}"></div>
-    </div>
-    <div class="two">
-      <div class="field"><label>Year</label><input id="pr-year" value="${d.year||""}"></div>
-      <div class="field"><label>Condition</label><input id="pr-cond" value="${App.esc(d.condition||"")}"></div>
-    </div>
-    <div class="two">
-      <div class="field"><label>Origin country</label><input id="pr-origin" value="${App.esc(d.origin_country||"")}"></div>
-      <div class="field"><label>Certification</label><input id="pr-cert" value="${App.esc(d.certification||"")}"></div>
-    </div>
-    <div class="field"><label>Price indication (free text)</label><input id="pr-price" placeholder="e.g. ~€420,000 or POA"></div>
-    <div class="field"><label>Public teaser blurb</label><textarea id="pr-teaser">${App.esc(d.specs||"")}</textarea></div>
-    <button class="btn btn-amber" id="pr-go">Create public listing</button>`;
-  App.fillCategorySelect(document.getElementById("pr-cat"));
-  document.getElementById("pr-cat").value = d.category || "";
-  document.getElementById("pr-cancel").onclick = () => box.classList.add("hidden");
-  document.getElementById("pr-go").onclick = async () => {
-    const rec = {
-      title: v("pr-title"), category: v("pr-cat") || d.category || "crawler_excavator",
-      manufacturer: v("pr-mfr")||null, model: v("pr-model")||null,
-      year: v("pr-year")?Number(v("pr-year")):null, condition: v("pr-cond")||null,
-      origin_country: v("pr-origin")||null, certification: v("pr-cert")||null,
-      price_indication: v("pr-price")||null, teaser: v("pr-teaser")||null,
-      status: "active", source_submission_id: d.id,
+  // Best-effort IP -> ISO-2 country code (runs in the visitor's browser).
+  async detectCountryCode() {
+    const grab = async (url, key) => {
+      try { const r = await fetch(url, { cache: "no-store" }); if (!r.ok) return null; const j = await r.json(); return ((j[key]||"")+"").toUpperCase() || null; }
+      catch (_) { return null; }
     };
-    const { error } = await sb.from("listings").insert(rec);
-    if (error) return App.toast(error.message, true);
-    await sb.from("machinery_submissions").update({ status: "listed" }).eq("id", d.id);
-    App.toast("Listing published & submission marked 'listed'.");
-    box.classList.add("hidden");
-    loadAll();
-  };
-}
+    return (await grab("https://ipapi.co/json/", "country")) ||
+           (await grab("https://ipwho.is/", "country_code")) || null;
+  },
 
-// ---- editable SHIPPING RATES ----
-async function loadRates(){
-  const { data } = await sb.from("shipping_rates").select("*").order("origin_country");
-  const t = document.getElementById("t-rates");
-  const head = `<thead><tr><th>Origin</th><th>Dest</th><th>Mode</th><th>Base</th><th>Per ton</th><th>Per m³</th><th>Ccy</th><th>Days</th><th>Notes</th><th></th></tr></thead>`;
-  t.innerHTML = head + `<tbody>` + (data||[]).map(r => rateRow(r)).join("") + `</tbody>`;
-  bindRates(t);
-}
-function rateRow(r){
-  return `<tr data-id="${r.id}">
-    <td><input value="${App.esc(r.origin_country)}" data-f="origin_country" size="3"></td>
-    <td><input value="${App.esc(r.destination_country)}" data-f="destination_country" size="3"></td>
-    <td><select data-f="mode">${["sea","air","road"].map(m=>`<option ${r.mode===m?"selected":""}>${m}</option>`).join("")}</select></td>
-    <td><input value="${r.base_cost}" data-f="base_cost" size="7"></td>
-    <td><input value="${r.per_ton}" data-f="per_ton" size="5"></td>
-    <td><input value="${r.per_cbm}" data-f="per_cbm" size="5"></td>
-    <td><input value="${App.esc(r.currency)}" data-f="currency" size="3"></td>
-    <td><input value="${r.transit_days||""}" data-f="transit_days" size="3"></td>
-    <td><input value="${App.esc(r.notes||"")}" data-f="notes" style="min-width:200px"></td>
-    <td class="flex"><button class="btn btn-dark btn-sm" data-save>Save</button><button class="btn btn-ghost btn-sm" data-del>Del</button></td>
-  </tr>`;
-}
-function bindRates(t){
-  t.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => {
-    const tr = b.closest("tr"); const upd = collect(tr, ["base_cost","per_ton","per_cbm","transit_days"]);
-    const { error } = await sb.from("shipping_rates").update({ ...upd, updated_at: new Date().toISOString() }).eq("id", tr.dataset.id);
-    App.toast(error ? error.message : "Rate saved", !!error);
-  });
-  t.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
-    const tr = b.closest("tr");
-    if (!confirm("Delete this route?")) return;
-    const { error } = await sb.from("shipping_rates").delete().eq("id", tr.dataset.id);
-    if (error) return App.toast(error.message, true);
-    tr.remove(); App.toast("Route deleted");
-  });
-}
-document.getElementById("add-rate").onclick = async () => {
-  const { error } = await sb.from("shipping_rates").insert({ origin_country:"SA", destination_country:"GB", mode:"sea", base_cost:0, currency:"GBP" });
-  App.toast(error ? error.message : "Route added — edit it below", !!error);
-  loadRates();
+  // ---- auth ----
+  async session() { const { data } = await window.sb.auth.getSession(); return data.session || null; },
+  async profile() {
+    const s = await this.session(); if (!s) return null;
+    const { data } = await window.sb.from("profiles").select("*").eq("id", s.user.id).single();
+    return data || null;
+  },
+  async signOut() { await window.sb.auth.signOut(); location.reload(); },
+
+  // ---- chrome ----
+  nav(current) {
+    const b = (window.APP_CONFIG && window.APP_CONFIG.BRAND) || "Machinery Desk";
+    const link = (href, label, id) => `<a href="${href}" ${id === current ? 'aria-current="page"' : ""}>${label}</a>`;
+    return `
+      <header class="nav"><div class="wrap">
+        <a class="brand" href="index.html">${App.esc(b)}<small>European-origin plant · export desk</small></a>
+        <nav>
+          ${link("index.html","Buy","buy")}
+          ${link("sell.html","Sell","sell")}
+          ${link("country-cost.html","Landed cost","cost")}
+          <a href="basket.html" id="nav-basket" ${current === "basket" ? 'aria-current="page"' : ""}>Basket</a>
+          ${link("account.html","Account","account")}
+          <span id="nav-admin"></span>
+          <select id="nav-ccy" class="nav-ccy" aria-label="Currency"></select>
+          <span id="nav-auth"></span>
+        </nav>
+      </div></header>`;
+  },
+  async paintNavAuth() {
+    App.paintBasketCount();
+    App.loadFx();
+    const cc = document.getElementById("nav-ccy");
+    if (cc && !cc.dataset.ready) {
+      cc.dataset.ready = "1";
+      cc.innerHTML = window.CURRENCIES.map(c => `<option value="${c.code}">${App.esc(c.label)}</option>`).join("");
+      cc.value = await App.resolveCcy();
+      cc.onchange = () => { App.setCcy(cc.value); location.reload(); };
+    }
+    const el = document.getElementById("nav-auth"); if (!el) return;
+    const s = await this.session();
+    const adm = document.getElementById("nav-admin");
+    if (s) { el.innerHTML = `<a href="#" id="nav-signout">Sign out</a>`;
+      document.getElementById("nav-signout").onclick = (e) => { e.preventDefault(); App.signOut(); };
+      if (adm) { const p = await App.profile(); adm.innerHTML = (p && p.role === "admin") ? `<a href="admin.html">Admin</a>` : ""; }
+    }
+    else { el.innerHTML = ""; if (adm) adm.innerHTML = ""; }
+  },
+  paintBasketCount() {
+    const el = document.getElementById("nav-basket"); if (!el) return;
+    const n = window.Basket ? Basket.count() : 0;
+    el.textContent = n ? `Basket (${n})` : "Basket";
+  },
+
+  // Shared landed-cost math (mirrors country-cost.html) for ONE unit.
+  // rate may be null (freight omitted). Returns the cost components.
+  landed(value, rule, rate, sz, cat) {
+    value = Number(value) || 0;
+    const tonnes = sz ? sz.tonnes : 0, cbm = sz ? sz.cbm : 0;
+    let freight = 0;
+    if (rate) freight = Number(rate.base_cost||0) + Number(rate.per_ton||0) * tonnes + Number(rate.per_cbm||0) * cbm;
+    const insurance = value * 0.01;
+    const cif = value + freight + insurance;
+    const duties = (rule && rule.duty_rates) || {};
+    const dutyRate = (cat in duties) ? Number(duties[cat]) : (("default" in duties) ? Number(duties.default) : 0);
+    const duty = cif * dutyRate;
+    const vatRate = (rule && Number(rule.import_vat_rate)) || 0;
+    const vat = (cif + duty) * vatRate;
+    return { freight, insurance, cif, dutyRate, duty, vatRate, vat, total: cif + duty + vat };
+  },
+  footer() {
+    const email = (window.APP_CONFIG && window.APP_CONFIG.CONTACT_EMAIL) || "desk@example.com";
+    return `<footer class="footer"><div class="wrap">
+        <strong>Indicative information only.</strong> Listings are teasers; landed-cost figures are
+        estimates, not a customs ruling, tax advice, or a binding quote. Verify duty, VAT, conformity
+        and export-control status with a licensed customs broker and qualified counsel before contracting.<br><br>
+        Contact: <a href="mailto:${App.esc(email)}">${App.esc(email)}</a> ·
+        We never publish seller identities or buyer contact details.
+      </div></footer>`;
+  },
 };
+window.App = App;
 
-// ---- editable COUNTRY RULES ----
-async function loadRules(){
-  const { data } = await sb.from("country_rules").select("*").order("country_name");
-  const t = document.getElementById("t-rules");
-  const head = `<thead><tr><th>Code</th><th>Name</th><th>duty_rates (JSON)</th><th>VAT</th><th>Recov?</th><th>Conformity</th><th>Restrictions</th><th>Dual-use</th><th>Sanctioned</th><th></th></tr></thead>`;
-  t.innerHTML = head + `<tbody>` + (data||[]).map(r => ruleRow(r)).join("") + `</tbody>`;
-  bindRules(t);
-}
-function ruleRow(r){
-  return `<tr data-id="${r.id}">
-    <td><input value="${App.esc(r.country_code)}" data-f="country_code" size="3"></td>
-    <td><input value="${App.esc(r.country_name)}" data-f="country_name" style="min-width:140px"></td>
-    <td><input value='${App.esc(JSON.stringify(r.duty_rates))}' data-f="duty_rates" data-json="1" style="min-width:200px"></td>
-    <td><input value="${r.import_vat_rate}" data-f="import_vat_rate" size="4"></td>
-    <td style="text-align:center"><input type="checkbox" data-f="vat_recoverable" ${r.vat_recoverable?"checked":""}></td>
-    <td><input value="${App.esc(r.conformity_required||"")}" data-f="conformity_required" style="min-width:160px"></td>
-    <td><input value="${App.esc(r.restrictions_notes||"")}" data-f="restrictions_notes" style="min-width:160px"></td>
-    <td><input value="${App.esc(r.dual_use_note||"")}" data-f="dual_use_note" style="min-width:160px"></td>
-    <td style="text-align:center"><input type="checkbox" data-f="sanctioned" ${r.sanctioned?"checked":""}></td>
-    <td class="flex"><button class="btn btn-dark btn-sm" data-save>Save</button><button class="btn btn-ghost btn-sm" data-del>Del</button></td>
-  </tr>`;
-}
-function bindRules(t){
-  t.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => {
-    const tr = b.closest("tr");
-    let upd;
-    try { upd = collect(tr, ["import_vat_rate"]); }
-    catch (e) { return App.toast(e.message, true); }
-    const { error } = await sb.from("country_rules").update({ ...upd, updated_at: new Date().toISOString() }).eq("id", tr.dataset.id);
-    App.toast(error ? error.message : "Rule saved", !!error);
-  });
-  t.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
-    const tr = b.closest("tr");
-    if (!confirm("Delete this country rule?")) return;
-    const { error } = await sb.from("country_rules").delete().eq("id", tr.dataset.id);
-    if (error) return App.toast(error.message, true);
-    tr.remove(); App.toast("Country rule deleted");
-  });
-}
-document.getElementById("add-rule").onclick = async () => {
-  const { error } = await sb.from("country_rules").insert({ country_code:"XX", country_name:"New country", duty_rates:{default:0}, import_vat_rate:0 });
-  App.toast(error ? error.message : "Country added — edit it below", !!error);
-  loadRules();
+// ---- Basket (localStorage; persists on the visitor's device) ----------
+window.Basket = {
+  KEY: "cpe_basket",
+  get() { try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch (_) { return []; } },
+  save(items) { try { localStorage.setItem(this.KEY, JSON.stringify(items)); } catch (_) {} if (window.App) App.paintBasketCount(); },
+  add(item) {
+    const items = this.get();
+    const ex = items.find(i => i.id === item.id);
+    const max = item.max || 99;
+    if (ex) ex.qty = Math.min((ex.qty || 1) + (item.qty || 1), max);
+    else items.push({ id: item.id, model: item.model, title: item.title, category: item.category,
+                      transport_class: item.transport_class, qty: Math.min(item.qty || 1, max), max });
+    this.save(items);
+  },
+  setQty(id, qty) {
+    const items = this.get(); const it = items.find(i => i.id === id);
+    if (it) it.qty = Math.max(0, Math.min(qty, it.max || 99));
+    this.save(items.filter(i => i.qty > 0));
+  },
+  remove(id) { this.save(this.get().filter(i => i.id !== id)); },
+  clear() { this.save([]); },
+  count() { return this.get().reduce((n, i) => n + (i.qty || 0), 0); },
 };
-
-// collect inputs in a row into an object; numFields -> Number; data-json -> JSON.parse; checkbox -> bool
-function collect(tr, numFields){
-  const o = {};
-  tr.querySelectorAll("[data-f]").forEach(inp => {
-    const f = inp.dataset.f;
-    if (inp.type === "checkbox") o[f] = inp.checked;
-    else if (inp.dataset.json) { try { o[f] = JSON.parse(inp.value); } catch(e){ throw new Error("Invalid JSON in "+f); } }
-    else if (numFields && numFields.includes(f)) o[f] = inp.value === "" ? null : Number(inp.value);
-    else o[f] = inp.value;
-  });
-  return o;
-}
-
-function v(id){ return document.getElementById(id).value.trim(); }
-
-// ===================== STOCK MANAGER =====================
-const DEFAULT_SPECS = ["Type","Max capacity","Main boom","Max tip height","Engine"];
-let stockReady = false;
-
-function specRow(k, val){
-  const wrap = document.createElement("div");
-  wrap.className = "two"; wrap.style.marginBottom = "6px";
-  wrap.innerHTML =
-    `<div class="field" style="margin:0"><input class="sp-k" placeholder="Label" value="${App.esc(k||"")}"></div>
-     <div class="field" style="margin:0;display:flex;gap:6px"><input class="sp-v" placeholder="Value" value="${App.esc(val||"")}" style="flex:1">
-       <button type="button" class="btn btn-ghost btn-sm sp-x" title="Remove">✕</button></div>`;
-  wrap.querySelector(".sp-x").onclick = () => wrap.remove();
-  return wrap;
-}
-
-function initStockForm(){
-  if (stockReady) return; stockReady = true;
-  App.fillCategorySelect(document.getElementById("n-cat"));
-  App.fillSizeSelect(document.getElementById("n-size"));
-  const specs = document.getElementById("n-specs");
-  DEFAULT_SPECS.forEach(k => specs.appendChild(specRow(k, "")));
-  document.getElementById("n-add-spec").onclick = () => specs.appendChild(specRow("", ""));
-  document.getElementById("n-publish").onclick = publishCrane;
-  document.getElementById("n-autofill").onclick = autofillFromPdf;
-}
-
-function fileToB64(file){
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result).split(",")[1]);
-    r.onerror = rej; r.readAsDataURL(file);
-  });
-}
-function setVal(id, val){ const el = document.getElementById(id); if (el && val != null && val !== "") el.value = val; }
-function applyDraft(d){
-  if (!d) return;
-  setVal("n-title", d.title); setVal("n-mfr", d.manufacturer); setVal("n-model", d.model);
-  if (d.category){ const sel = document.getElementById("n-cat"); if ([...sel.options].some(o => o.value === d.category)) sel.value = d.category; }
-  setVal("n-year", d.year); setVal("n-cond", d.condition); setVal("n-origin", d.origin_country);
-  if (d.transport_class){ const sel = document.getElementById("n-size"); if ([...sel.options].some(o => o.value === d.transport_class)) sel.value = d.transport_class; }
-  setVal("n-summary", d.spec_summary);
-  let rows = Array.isArray(d.key_specs) ? d.key_specs.slice() : [];
-  const add = (k, val) => { if (val && !rows.some(r => r.k && r.k.toLowerCase() === k.toLowerCase())) rows.push({ k, v: val }); };
-  add("Max capacity", d.capacity); add("Main boom", d.main_boom); add("Max tip height", d.max_tip); add("Engine", d.engine);
-  if (rows.length){ const specs = document.getElementById("n-specs"); specs.innerHTML = ""; rows.forEach(r => specs.appendChild(specRow(r.k || "", r.v || ""))); }
-}
-async function autofillFromPdf(){
-  const f = document.getElementById("n-pdf").files[0];
-  const status = document.getElementById("n-status");
-  const btn = document.getElementById("n-autofill");
-  if (!f) return App.toast("Choose a PDF first", true);
-  btn.disabled = true; status.textContent = "Reading brochure with Claude…";
-  try {
-    const pdf_base64 = await fileToB64(f);
-    const { data, error } = await sb.functions.invoke("parse-brochure", { body: { pdf_base64 } });
-    if (error) throw error;
-    if (!data || !data.ok) throw new Error((data && data.error) || "parse failed");
-    applyDraft(data.draft);
-    status.textContent = "Draft filled — review every field before publishing.";
-    App.toast("Autofilled from PDF — please review.");
-  } catch (err) {
-    status.textContent = "";
-    App.toast("Autofill failed: " + (err.message || err), true);
-  } finally { btn.disabled = false; }
-}
-
-async function uploadPublic(file, prefix){
-  const ext = (file.name.split(".").pop() || "bin").toLowerCase();
-  const path = `${prefix}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
-  const { error } = await sb.storage.from("listing-media").upload(path, file, { upsert: true, contentType: file.type });
-  if (error) throw error;
-  return sb.storage.from("listing-media").getPublicUrl(path).data.publicUrl;
-}
-
-async function publishCrane(){
-  const btn = document.getElementById("n-publish");
-  const status = document.getElementById("n-status");
-  const title = v("n-title"), model = v("n-model");
-  if (!title || !v("n-cat")) { App.toast("Title and category are required", true); return; }
-
-  // build key_specs from the rows + structured fields
-  const rows = [...document.querySelectorAll("#n-specs .two")].map(r => ({
-    k: r.querySelector(".sp-k").value.trim(), v: r.querySelector(".sp-v").value.trim()
-  })).filter(s => s.k && s.v);
-  const add = (k, val) => { if (val) rows.push({ k, v: val }); };
-  add("Year of manufacture", v("n-year"));
-  add("Operating hours", v("n-hours"));
-  add("Condition", v("n-cond"));
-  add("Country of build", v("n-origin"));
-  add("Conformity", v("n-cert"));
-  add("Located", v("n-loc"));
-
-  btn.disabled = true; status.textContent = "Uploading…";
-  try {
-    let image_url = null, brochure_url = null;
-    const img = document.getElementById("n-image").files[0];
-    const pdf = document.getElementById("n-pdf").files[0];
-    if (img) { status.textContent = "Uploading photo…"; image_url = await uploadPublic(img, "images"); }
-    if (pdf) { status.textContent = "Uploading brochure…"; brochure_url = await uploadPublic(pdf, "brochures"); }
-
-    status.textContent = "Saving listing…";
-    const rec = {
-      title, category: v("n-cat"),
-      manufacturer: v("n-mfr") || null, model: model || null,
-      year: v("n-year") ? Number(v("n-year")) : null,
-      condition: v("n-cond") || null,
-      origin_country: v("n-origin") || null,
-      current_location: v("n-loc") || null,
-      certification: v("n-cert") || null,
-      price_indication: v("n-price") || "POA",
-      price_sar: v("n-price-sar") ? Number(v("n-price-sar")) : null,
-      stock_qty: v("n-qty") ? Number(v("n-qty")) : 1,
-      transport_class: v("n-size") || "heavy",
-      teaser: v("n-teaser") || null,
-      spec_summary: v("n-summary") || null,
-      key_specs: rows,
-      image_url, brochure_url,
-      status: "active",
-    };
-    const { error } = await sb.from("listings").insert(rec);
-    if (error) throw error;
-    App.toast("Crane published and live on the home page.");
-    status.textContent = "Published ✓";
-    // reset the simple fields
-    ["n-title","n-model","n-year","n-hours","n-teaser","n-summary","n-image","n-pdf"].forEach(id => document.getElementById(id).value = "");
-    loadAll();
-  } catch (err) {
-    status.textContent = "";
-    App.toast("Could not publish: " + (err.message || err), true);
-  } finally { btn.disabled = false; }
-}
-
-async function loadStock(){
-  initStockForm();
-  const { data } = await sb.from("listings").select("*").order("created_at", { ascending: false });
-  const rows = data || [];
-  document.getElementById("c-stock").textContent = rows.length;
-  const t = document.getElementById("t-stock");
-  t.innerHTML = `<thead><tr><th>Photo</th><th>Title</th><th>Model</th><th>Qty</th><th>Status</th><th>PDF</th><th></th></tr></thead><tbody>` +
-    rows.map(l => `<tr data-id="${l.id}">
-      <td>${l.image_url ? `<img src="${App.esc(l.image_url)}" alt="" style="width:54px;height:38px;object-fit:cover;border-radius:5px">` : '<span class="muted">—</span>'}</td>
-      <td>${App.esc(l.title)}</td>
-      <td>${App.esc(l.model||"")}</td>
-      <td>${l.stock_qty==null?"":l.stock_qty}</td>
-      <td><span class="badge ${l.status==="active"?"ok":"neutral"}">${App.esc(l.status||"")}</span></td>
-      <td>${l.brochure_url?'<span class="badge ok">PDF</span>':'<span class="muted">—</span>'}</td>
-      <td style="white-space:nowrap">
-        <button class="btn btn-ghost btn-sm" data-toggle="${l.id}">${l.status==="active"?"Pause":"Activate"}</button>
-        <button class="btn btn-ghost btn-sm" data-del="${l.id}" style="color:var(--danger)">Delete</button>
-      </td></tr>`).join("") + `</tbody>`;
-
-  t.querySelectorAll("[data-toggle]").forEach(b => b.onclick = async () => {
-    const row = rows.find(r => r.id === b.dataset.toggle);
-    const next = row.status === "active" ? "paused" : "active";
-    const { error } = await sb.from("listings").update({ status: next }).eq("id", row.id);
-    if (error) return App.toast(error.message, true);
-    loadStock();
-  });
-  t.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
-    if (!confirm("Delete this listing permanently?")) return;
-    const { error } = await sb.from("listings").delete().eq("id", b.dataset.del);
-    if (error) return App.toast(error.message, true);
-    App.toast("Listing deleted."); loadStock();
-  });
-}
-
-sb.auth.onAuthStateChange(() => gate());
-gate();
-</script>
-</body>
-</html>
