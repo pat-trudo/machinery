@@ -285,6 +285,12 @@ const App = {
     for (const k in tiers) { if (qty >= Number(k)) best = Math.max(best, Number(tiers[k]) || 0); }
     return best;
   },
+  // WhatsApp click-to-chat link, or null if no number configured
+  waLink(text) {
+    const num = (window.APP_CONFIG && APP_CONFIG.CONTACT_WHATSAPP || "").replace(/[^0-9]/g, "");
+    if (!num) return null;
+    return `https://wa.me/${num}?text=${encodeURIComponent(text || "")}`;
+  },
 
 
   money(n, ccy = "GBP") {
@@ -366,6 +372,7 @@ const App = {
           ${link("country-cost.html","Landed cost","cost")}
           <a href="basket.html" id="nav-basket" ${current === "basket" ? 'aria-current="page"' : ""}>Basket</a>
           ${link("account.html","Account","account")}
+          <span id="nav-admin"></span>
           <select id="nav-ccy" class="nav-ccy" aria-label="Currency"></select>
           <span id="nav-auth"></span>
         </nav>
@@ -383,9 +390,12 @@ const App = {
     }
     const el = document.getElementById("nav-auth"); if (!el) return;
     const s = await this.session();
+    const adm = document.getElementById("nav-admin");
     if (s) { el.innerHTML = `<a href="#" id="nav-signout">Sign out</a>`;
-      document.getElementById("nav-signout").onclick = (e) => { e.preventDefault(); App.signOut(); }; }
-    else { el.innerHTML = ""; }
+      document.getElementById("nav-signout").onclick = (e) => { e.preventDefault(); App.signOut(); };
+      if (adm) { const p = await App.profile(); adm.innerHTML = (p && p.role === "admin") ? `<a href="admin.html">Admin</a>` : ""; }
+    }
+    else { el.innerHTML = ""; if (adm) adm.innerHTML = ""; }
   },
   paintBasketCount() {
     const el = document.getElementById("nav-basket"); if (!el) return;
