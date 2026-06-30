@@ -59,22 +59,34 @@
 
 <!-- WHY EUROPEAN-ORIGIN STRIP -->
 <section style="background:var(--steel);color:#e8ebee">
-  <div class="wrap" style="padding:34px 24px">
-    <div class="grid stack-mobile" style="grid-template-columns:repeat(3,1fr)">
+  <div class="wrap" style="padding:40px 24px">
+    <p class="eyebrow">How we work</p>
+    <h2 style="color:#fff;margin:6px 0 22px">From enquiry to delivered unit</h2>
+    <div class="grid stack-mobile" style="grid-template-columns:repeat(5,1fr);gap:22px">
       <div>
-        <p class="eyebrow">Provenance</p>
-        <h3 style="color:#fff;margin:6px 0 6px">Documented histories</h3>
-        <p class="muted" style="color:#aeb4bc;font-size:.9rem">Single-market service records, hours and ownership you can audit — not grey-market re-stamps.</p>
+        <div class="mono" style="color:var(--amber);font-size:.8rem">01</div>
+        <h3 style="color:#fff;margin:6px 0 6px;font-size:1.05rem">We source</h3>
+        <p class="muted" style="color:#aeb4bc;font-size:.88rem">EU CE-certified equipment held across the GCC, to a high quality standard — available at a discount to European-market prices.</p>
       </div>
       <div>
-        <p class="eyebrow">Compliance</p>
-        <h3 style="color:#fff;margin:6px 0 6px">CE marking as standard</h3>
-        <p class="muted" style="color:#aeb4bc;font-size:.9rem">Built to EU machinery directives, which smooths conformity into GB (CE/UKCA) and most GCC regimes.</p>
+        <div class="mono" style="color:var(--amber);font-size:.8rem">02</div>
+        <h3 style="color:#fff;margin:6px 0 6px;font-size:1.05rem">You enquire</h3>
+        <p class="muted" style="color:#aeb4bc;font-size:.88rem">Make an enquiry on any unit and we circulate full specifications and documentation.</p>
       </div>
       <div>
-        <p class="eyebrow">Engineering</p>
-        <h3 style="color:#fff;margin:6px 0 6px">Maintained to schedule</h3>
-        <p class="muted" style="color:#aeb4bc;font-size:.9rem">European operators run strict maintenance intervals — fewer surprises after the unit lands.</p>
+        <div class="mono" style="color:var(--amber);font-size:.8rem">03</div>
+        <h3 style="color:#fff;margin:6px 0 6px;font-size:1.05rem">Inspect or visit</h3>
+        <p class="muted" style="color:#aeb4bc;font-size:.88rem">We arrange a local inspection on your behalf, or you visit and inspect the unit in person.</p>
+      </div>
+      <div>
+        <div class="mono" style="color:var(--amber);font-size:.8rem">04</div>
+        <h3 style="color:#fff;margin:6px 0 6px;font-size:1.05rem">You bid</h3>
+        <p class="muted" style="color:#aeb4bc;font-size:.88rem">Place a bid with the company. Prices are competitive and negotiable on multiples.</p>
+      </div>
+      <div>
+        <div class="mono" style="color:var(--amber);font-size:.8rem">05</div>
+        <h3 style="color:#fff;margin:6px 0 6px;font-size:1.05rem">We ship</h3>
+        <p class="muted" style="color:#aeb4bc;font-size:.88rem">On agreement we help arrange shipping and haulage all the way to your destination.</p>
       </div>
     </div>
   </div>
@@ -93,10 +105,27 @@
 
     <!-- filters -->
     <div class="card" style="margin-bottom:22px">
-      <div class="grid stack-mobile" style="grid-template-columns:repeat(3,1fr)">
+      <div class="grid stack-mobile" style="grid-template-columns:repeat(3,1fr);gap:14px">
         <div><label for="f-cat">Category</label><select id="f-cat"><option value="">All categories</option></select></div>
         <div><label for="f-cert">Certification</label><select id="f-cert"><option value="">Any</option></select></div>
         <div><label for="f-mfr">Manufacturer</label><select id="f-mfr"><option value="">Any</option></select></div>
+      </div>
+      <div class="grid stack-mobile" style="grid-template-columns:repeat(3,1fr);gap:14px;margin-top:12px">
+        <div><label for="f-cond">Condition</label><select id="f-cond"><option value="">Any</option></select></div>
+        <div><label>Year (min / max)</label><div class="flex" style="gap:8px"><input id="f-ymin" type="number" placeholder="from" min="1980" max="2030"><input id="f-ymax" type="number" placeholder="to" min="1980" max="2030"></div></div>
+        <div><label for="f-sort">Sort by</label><select id="f-sort">
+          <option value="recent">Recently added</option>
+          <option value="price_asc">Price (low → high)</option>
+          <option value="price_desc">Price (high → low)</option>
+          <option value="year_desc">Year (newest)</option>
+          <option value="year_asc">Year (oldest)</option>
+          <option value="hours_asc">Hours (lowest)</option>
+        </select></div>
+      </div>
+      <div class="grid stack-mobile" style="grid-template-columns:repeat(3,1fr);gap:14px;margin-top:12px">
+        <div><label>Price min/max (SAR)</label><div class="flex" style="gap:8px"><input id="f-pmin" type="number" placeholder="from" min="0" step="50000"><input id="f-pmax" type="number" placeholder="to" min="0" step="50000"></div></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn btn-ghost btn-sm" id="f-reset" type="button">Reset filters</button></div>
+        <div></div>
       </div>
     </div>
 
@@ -176,19 +205,51 @@ async function loadListings() {
   // build cert + manufacturer filters from data
   const certs = [...new Set(ALL.map(l => l.certification).filter(Boolean))].sort();
   const mfrs  = [...new Set(ALL.map(l => l.manufacturer).filter(Boolean))].sort();
+  const conds = [...new Set(ALL.map(l => l.condition).filter(Boolean))].sort();
   document.getElementById("f-cert").insertAdjacentHTML("beforeend", certs.map(c => `<option>${App.esc(c)}</option>`).join(""));
   document.getElementById("f-mfr").insertAdjacentHTML("beforeend", mfrs.map(m => `<option>${App.esc(m)}</option>`).join(""));
+  document.getElementById("f-cond").insertAdjacentHTML("beforeend", conds.map(c => `<option>${App.esc(c)}</option>`).join(""));
   render();
 }
 
+function hoursOf(l){
+  const specs = Array.isArray(l.key_specs) ? l.key_specs : [];
+  const h = (specs.find(s => /hours/i.test(s.k)) || {}).v || "";
+  const m = String(h).replace(/,/g,"").match(/\d+/);
+  return m ? Number(m[0]) : null;
+}
 function render() {
   const cat = document.getElementById("f-cat").value;
   const cert = document.getElementById("f-cert").value;
   const mfr = document.getElementById("f-mfr").value;
-  const rows = ALL.filter(l =>
+  const cond = document.getElementById("f-cond").value;
+  const ymin = Number(document.getElementById("f-ymin").value) || null;
+  const ymax = Number(document.getElementById("f-ymax").value) || null;
+  const pmin = Number(document.getElementById("f-pmin").value) || null;
+  const pmax = Number(document.getElementById("f-pmax").value) || null;
+  const sort = document.getElementById("f-sort").value;
+
+  let rows = ALL.filter(l =>
     (!cat || l.category === cat) &&
     (!cert || l.certification === cert) &&
-    (!mfr || l.manufacturer === mfr));
+    (!mfr || l.manufacturer === mfr) &&
+    (!cond || l.condition === cond) &&
+    (!ymin || (l.year && l.year >= ymin)) &&
+    (!ymax || (l.year && l.year <= ymax)) &&
+    (!pmin || (l.price_sar && l.price_sar >= pmin)) &&
+    (!pmax || (l.price_sar && l.price_sar <= pmax)));
+
+  const big = 9e15;
+  rows = rows.slice().sort((a,b) => {
+    switch (sort) {
+      case "price_asc":  return (a.price_sar ?? big) - (b.price_sar ?? big);
+      case "price_desc": return (b.price_sar ?? -1) - (a.price_sar ?? -1);
+      case "year_desc":  return (b.year ?? -1) - (a.year ?? -1);
+      case "year_asc":   return (a.year ?? big) - (b.year ?? big);
+      case "hours_asc":  return (hoursOf(a) ?? big) - (hoursOf(b) ?? big);
+      default:           return new Date(b.created_at||0) - new Date(a.created_at||0);
+    }
+  });
 
   const el = document.getElementById("listings");
   document.getElementById("listings-empty").classList.toggle("hidden", rows.length > 0);
@@ -198,6 +259,11 @@ function render() {
     const hrs = (specs.find(s => /hours/i.test(s.k)) || {}).v;
     const href = `product.html?id=${encodeURIComponent(l.id)}`;
     const qty = l.stock_qty == null ? null : Number(l.stock_qty);
+    const isNew = /new|unused/i.test(l.condition||"") || /^0\b/.test(String(hrs||"").trim());
+    const badges = [
+      l.certification ? `<span class="cert">${App.esc(l.certification)}</span>` : "",
+      isNew ? `<span class="badge ok">0 h · unused</span>` : (l.condition ? `<span class="badge neutral">${App.esc(l.condition)}</span>` : ""),
+    ].filter(Boolean).join("");
     return `
     <article class="listing">
       <a href="${href}" class="thumb" style="display:block">${l.image_url ? `<img src="${App.esc(l.image_url)}" alt="" style="position:absolute;inset:0;object-fit:cover;width:100%;height:100%">` : ""}<span class="tag">${App.esc(App.catLabel(l.category))}</span>${qty ? `<span class="tag" style="left:auto;right:10px;background:var(--amber,#F2B705);color:#1a1a1a">${qty} available</span>` : ""}</a>
@@ -208,13 +274,17 @@ function render() {
           ${cap ? "Capacity: " + App.esc(cap) + "<br>" : ""}
           ${l.origin_country ? "Origin: " + App.esc(l.origin_country) + " · " : ""}${l.year || ""}${hrs ? "<br>Hours: " + App.esc(hrs) : ""}${l.current_location ? "<br>Located: " + App.esc(l.current_location) : ""}
         </div>
-        <div class="flex" style="gap:6px">${l.certification ? `<span class="cert">${App.esc(l.certification)}</span>` : ""}</div>
+        <div class="flex" style="gap:6px;flex-wrap:wrap">${badges}</div>
         <div class="price">${l.price_sar ? App.fmtSar(l.price_sar) + ' <small style="font-weight:400;color:var(--muted)">per unit' + (l.discount_tiers && Object.keys(l.discount_tiers).length ? " · multi-unit discount" : "") + '</small>' : App.esc(l.price_indication || "POA")}</div>
         <a href="${href}" class="btn btn-dark btn-sm">View details &amp; add to basket</a>
       </div>
     </article>`; }).join("");
 }
-["f-cat","f-cert","f-mfr"].forEach(id => document.getElementById(id).addEventListener("change", render));
+["f-cat","f-cert","f-mfr","f-cond","f-ymin","f-ymax","f-pmin","f-pmax","f-sort"].forEach(id => document.getElementById(id).addEventListener("input", render));
+document.getElementById("f-reset").addEventListener("click", () => {
+  ["f-cat","f-cert","f-mfr","f-cond","f-ymin","f-ymax","f-pmin","f-pmax"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("f-sort").value = "recent"; render();
+});
 
 window.prefill = (cat) => { document.getElementById("l-cat").value = cat; };
 
